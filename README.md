@@ -1,2 +1,3 @@
-# robust-adaptive-control-multinoise-output
- Robust Learning-Based Control from Output Measurements via Bootstrapped Multiplicative Noise 
+# rocoboom_out
+
+**Ro**bust **co**ntrol using **boo**tstrapped **m**ultiplicative noise from **out**put measurements
