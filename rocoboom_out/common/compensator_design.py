@@ -36,7 +36,7 @@ def aug_sysmat_cl(A, B, C, F, K, L):
                      [np.dot(L, C), F]])
 
 
-def ce_compensator(model, Y, R):
+def make_ce_compensator(model, Y, R):
     # Model information
     A = model.A
     B = model.B
@@ -49,10 +49,12 @@ def ce_compensator(model, Y, R):
     # Penalty information
     Q = np.dot(C.T, np.dot(Y, C))  # Convert output penalty to state penalty in model coordinates
 
+    # Solve Riccati equations to get control and estimator value matrices, gains
     P, K = dare_gain(A, B, Q, R)
     S, L = dare_gain(A.T, C.T, W, V, E=None, S=U)
     L = -L.T
-    # Create the model matrix
+
+    # Create the model matrix & compensator
     F = sysmat_cl(A, B, C, K, L)
     compensator = Compensator(F, K, L)
     return compensator
@@ -79,7 +81,6 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
     # Penalty information
     Q = np.dot(C.T, np.dot(Y, C))  # Convert output penalty to state penalty in model coordinates
 
-    noise_limit_scale = 1.0
     tag_str_list = []
 
     # TODO account for correlation between A, B, C multiplicative noises in gdare
@@ -93,7 +94,7 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
         return solver(sysdata, X0, **solver_kwargs)
 
     if uncertainty is None or noise_post_scale == 0:
-        compensator = ce_compensator(model, Y, R)
+        compensator = make_ce_compensator(model, Y, R)
         scale = 0.0
     else:
         # Uncertainty information
@@ -151,13 +152,13 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
                                                        message_type='fail'))
                         tag_str_list.append(create_tag('Falling back on cert-equiv gain',
                                                        message_type='fail'))
-                    compensator = ce_compensator(model, Y, R)
+                    compensator = make_ce_compensator(model, Y, R)
                     scale = 0.0
                     return compensator, scale, tag_str_list
             else:
                 if log_diagnostics:
                     tag_str_list.append(create_tag('Bisection collapsed to cert-equiv'))
-                compensator = ce_compensator(model, Y, R)
+                compensator = make_ce_compensator(model, Y, R)
                 scale = 0.0
                 return compensator, scale, tag_str_list
 

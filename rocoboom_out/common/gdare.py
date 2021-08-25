@@ -89,7 +89,7 @@ def example_sysdata(beta=0.1):
 
 
 def unpack(sysdata):
-    return [sysdata[key] for key in ['A', 'B', 'C', 'a', 'Aa', 'b', 'Bb', 'c', 'Cc', 'Q', 'R', 'W', 'V', 'n', 'm', 'p']]
+    return [np.asarray(sysdata[key]) for key in ['A', 'B', 'C', 'a', 'Aa', 'b', 'Bb', 'c', 'Cc', 'Q', 'R', 'W', 'V', 'n', 'm', 'p']]
 
 
 def qfun(X, sysdata):

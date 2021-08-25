@@ -10,7 +10,9 @@
 - cvxpy
 - casadi
 
-Run the commands
+### Conda 
+
+Run the package installation commands
 
 `conda install numpy scipy matplotlib`
 
@@ -18,3 +20,9 @@ Run the commands
 `conda install -c conda-forge cvxpy`
 
 `pip install casadi`
+
+## Installation
+
+### Conda
+
+TODO
