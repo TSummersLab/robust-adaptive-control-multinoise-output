@@ -45,7 +45,7 @@ def make_ss(A, B, C, D=None, Q=None, R=None, S=None, dt=1.0,):
 
 
 def ss_change_coordinates(model_tgt, model_src, method='match'):
-    # Find a suitable similarity transform matrix P which transforms coordinates from x (original) to xbar (identified)
+    # Find a suitable similarity transform matrix P which transforms coordinates from x (source) to xbar (target)
     # i.e. x = P @ xbar
 
     A = model_tgt.A

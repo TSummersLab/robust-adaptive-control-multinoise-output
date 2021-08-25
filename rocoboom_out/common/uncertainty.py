@@ -5,8 +5,8 @@ import numpy.random as npr
 
 from utility.matrixmath import mdot
 
-from sysid import system_identification
-from ss_tools import ss_change_coordinates, groupdot
+from rocoboom_out.common.sysid import system_identification
+from rocoboom_out.common.ss_tools import ss_change_coordinates, groupdot
 
 
 class Uncertainty:

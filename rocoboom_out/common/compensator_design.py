@@ -8,9 +8,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from utility.matrixmath import mdot, specrad, minsv, lstsqb, dlyap, dare, dare_gain
-from utility.printing import printcolors, create_tag
+from utility.printing import create_tag
 
-from gdare import value_iteration, gain
+from rocoboom_out.common.gdare import value_iteration, gain
 
 
 @dataclass
