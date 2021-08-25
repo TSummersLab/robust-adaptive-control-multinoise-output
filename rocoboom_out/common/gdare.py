@@ -1,8 +1,8 @@
 # Combined estimator and controller design for multiplicative noise LQG
 
-import autograd.numpy as np
-import autograd.numpy.linalg as la
-import autograd.numpy.random as npr
+import numpy as np
+import numpy.linalg as la
+import numpy.random as npr
 import matplotlib.pyplot as plt
 
 from utility.matrixmath import specrad, vec, mat
