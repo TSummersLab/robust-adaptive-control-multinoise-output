@@ -1,9 +1,5 @@
 """
 Functions for linear dynamic compensator design.
-
-Compensator structure: (F, K, L)
-xhat[t+1] = F @ xhat[t] + L @ y[t]
-     u[t] = K @ xhat[t]
 """
 
 from time import time
@@ -40,6 +36,28 @@ def aug_sysmat_cl(A, B, C, F, K, L):
                      [np.dot(L, C), F]])
 
 
+def ce_compensator(model, Y, R):
+    # Model information
+    A = model.A
+    B = model.B
+    C = model.C
+
+    W = model.Q
+    V = model.R
+    U = model.S
+
+    # Penalty information
+    Q = np.dot(C.T, np.dot(Y, C))  # Convert output penalty to state penalty in model coordinates
+
+    P, K = dare_gain(A, B, Q, R)
+    S, L = dare_gain(A.T, C.T, W, V, E=None, S=U)
+    L = -L.T
+    # Create the model matrix
+    F = sysmat_cl(A, B, C, K, L)
+    compensator = Compensator(F, K, L)
+    return compensator
+
+
 def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_scale=1.0,
                      bisection_epsilon=0.01, log_diagnostics=True):
 
@@ -64,18 +82,8 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
     noise_limit_scale = 1.0
     tag_str_list = []
 
-    # TODO account for correlation between A, B, C in gdare
-    # TODO include the (estimated) cross-covariance model.S in the gdare
-
-    def ce_compensator():
-        # TODO include the (estimated) cross-covariance U = model.S in the dare
-        P, K = dare_gain(A, B, Q, R)
-        S, L = dare_gain(A.T, C.T, W, V)
-        L = -L.T
-        # Create the model matrix
-        F = sysmat_cl(A, B, C, K, L)
-        compensator = Compensator(F, K, L)
-        return compensator
+    # TODO account for correlation between A, B, C multiplicative noises in gdare
+    # TODO include the (estimated) cross-covariance model.S between additive process & measurement noise in the gdare
 
     def solve_gdare(sysdata, X0=None, solver=None, solver_kwargs=None):
         if solver is None:
@@ -85,7 +93,7 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
         return solver(sysdata, X0, **solver_kwargs)
 
     if uncertainty is None or noise_post_scale == 0:
-        compensator = ce_compensator()
+        compensator = ce_compensator(model, Y, R)
         scale = 0.0
     else:
         # Uncertainty information
@@ -143,13 +151,13 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
                                                        message_type='fail'))
                         tag_str_list.append(create_tag('Falling back on cert-equiv gain',
                                                        message_type='fail'))
-                    compensator = ce_compensator()
+                    compensator = ce_compensator(model, Y, R)
                     scale = 0.0
                     return compensator, scale, tag_str_list
             else:
                 if log_diagnostics:
                     tag_str_list.append(create_tag('Bisection collapsed to cert-equiv'))
-                compensator = ce_compensator()
+                compensator = ce_compensator(model, Y, R)
                 scale = 0.0
                 return compensator, scale, tag_str_list
 

@@ -61,12 +61,23 @@ def OLSims(y, u, f, weights='N4SID', threshold=0.1, max_order=np.NaN, fixed_orde
     else:
         threshold, max_order = check_inputs(threshold, max_order, fixed_order, f)  # threshold, max_order = 0, fixed_order
         N = L - 2*f + 1
-        Ustd = np.zeros(m)
-        Ystd = np.zeros(l)
-        for j in range(m):
-            Ustd[j], u[j] = rescale(u[j])
-        for j in range(l):
-            Ystd[j], y[j] = rescale(y[j])
+
+        # # This chunk enables standardization of the input and output data
+        # Ustd = np.zeros(m)
+        # Ystd = np.zeros(l)
+        # for j in range(m):
+        #     Ustd[j], u[j] = rescale(u[j])
+        # for j in range(l):
+        #     Ystd[j], y[j] = rescale(y[j])
+
+        # This chunk disables standardization of the input and output data
+        Ustd = np.ones(m)
+        Ystd = np.ones(l)
+        # for j in range(m):
+        #     Ustd[j], u[j] = rescale(u[j])
+        # for j in range(l):
+        #     Ystd[j], y[j] = rescale(y[j])
+
         U_n, S_n, V_n, W1, O_i = SVD_weighted(y, u, f, l, weights)
         Ob, X_fd, M, n, residuals = algorithm_1(y, u, l, m, f, N, U_n, S_n, V_n, W1, O_i, threshold,
                                                 max_order, D_required)
