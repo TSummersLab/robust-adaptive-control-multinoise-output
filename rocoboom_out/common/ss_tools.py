@@ -35,9 +35,9 @@ def make_ss(A, B, C, D=None, Q=None, R=None, S=None, dt=1.0,):
     if Q is None:
         Q = np.zeros([n, n])
     if R is None:
-        R = np.zeros([m, m])
+        R = np.zeros([p, p])
     if S is None:
-        S = np.zeros([n, m])
+        S = np.zeros([n, p])
     ss.Q = Q
     ss.R = R
     ss.S = S

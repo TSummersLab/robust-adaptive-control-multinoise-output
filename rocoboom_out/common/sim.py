@@ -127,7 +127,10 @@ def lsim_cl(ss, compensator, x0, w_hist, v_hist, T):
     y_hist = np.zeros([T, p])
 
     x_hist[0] = x0
-    xhat_hist[0] = x0
+
+    # xhat_hist[0] = x0  # THIS IS BAD, DO NOT DO THIS! Only valid if compensator is in the same state coordinate system as the true system, which is generally not true!
+    xhat_hist[0] = np.zeros_like(x0)
+
 
     for t in range(T):
         x = x_hist[t]

@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 
 import control
 
+from utility.lti import ctrb, obsv
+from utility.printing import create_tag
+
 from rocoboom_out.common.problem_data_gen import gen_system_omni
 from rocoboom_out.common.signal_gen import SigParam, make_sig
 from rocoboom_out.common.sim import make_offline_data, lsim_cl
@@ -103,7 +106,7 @@ def comparison_response_plot(ss_true, ss_model, ss_models_boot, T_resp=50, num_m
     return fig, axs
 
 
-def comparison_closed_loop_plot(result_dict, t_sim=None, disturb_method='zeros'):
+def comparison_closed_loop_plot(result_dict, t_sim=None, disturb_method='zeros', disturb_scale=1.0):
     # Make initial state
     x0 = np.ones(n)
 
@@ -112,13 +115,13 @@ def comparison_closed_loop_plot(result_dict, t_sim=None, disturb_method='zeros')
         t_sim = T
 
     # Make disturbance histories
-    w_play_hist = make_sig(t_sim, n, [SigParam(method=disturb_method, mean=0, scale=1.0, ma_length=None)])
-    v_play_hist = make_sig(t_sim, p, [SigParam(method=disturb_method, mean=0, scale=1.0, ma_length=None)])
+    w_play_hist = make_sig(t_sim, n, [SigParam(method=disturb_method, mean=0, scale=disturb_scale, ma_length=None)])
+    v_play_hist = make_sig(t_sim, p, [SigParam(method=disturb_method, mean=0, scale=disturb_scale, ma_length=None)])
 
     fig, axs = plt.subplots(ncols=p, sharex=True, figsize=(8, 6))
     if p == 1:
         axs = [axs]
-    for key in ['rob', 'ceq', 'opt']:
+    for key in methods:
         result = result_dict[key]
         x_hist, u_hist, y_hist, xhat_hist = lsim_cl(ss_true, result.compensator, x0, w_play_hist, v_play_hist, t_sim)
         for i in range(p):
@@ -209,32 +212,26 @@ if __name__ == "__main__":
 
     # Problem data
     # system_kwargs = dict(n=4, m=2, p=2, spectral_radius=0.9, noise_scale=0.1, seed=1)
-    # n, m, p, A, B, C, D, Y, Q, R, W, V = gen_system_omni('rand', **system_kwargs)
+    # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('rand', **system_kwargs)
 
-    n, m, p = 2, 1, 1
-    A = np.array([[0.0, 1.0],
-                  [0.0, 0.0]])
-    B = np.array([[0.0],
-                  [1.0]])
-    C = np.array([[1.0, -1.0]])
-    D = np.array([[0.0]])
-    Y = np.eye(p)
-    Q = np.dot(C.T, np.dot(Y, C))
-    R = 0.001*np.eye(m)
-    W = 0.01*np.eye(n)
-    V = 0.01*np.eye(p)
+    # TODO figure out why using t = 100 results in estimated B = zeros
+    n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=1)
 
-    ss_true = make_ss(A, B, C, D, W, V)
+
+    ss_true = make_ss(A, B, C, D, W, V, U)
 
     # Check controllability and observability of the true system
-    from utility.lti import ctrb, obsv
-    from utility.printing import create_tag
+    check_tags = []
     if la.matrix_rank(ctrb(A, B)) < n:
-        tag = create_tag()
+        check_tags.append(create_tag("The pair (A, B) is NOT controllable.", message_type='warn'))
+    if la.matrix_rank(obsv(Q, A)) < n:
+        check_tags.append(create_tag("The pair (Q, A) is NOT observable.", message_type='warn'))
+    if la.matrix_rank(obsv(A, C)) < n:
+        check_tags.append(create_tag("The pair (A, C) is NOT observable.", message_type='warn'))
+    if la.matrix_rank(ctrb(A - np.dot(U, la.solve(V, C)), B)) < n:
+        check_tags.append(create_tag("The pair (A - U V^-1 C, B) is NOT controllable.", message_type='warn'))
+    for tag in check_tags:
         print(tag)
-    obsv(Q, A)
-    obsv(A, C)
-    ctrb(W, A)
 
 
     # Make training data
@@ -284,25 +281,25 @@ if __name__ == "__main__":
 
     # With lots of data, ss_model_trans should match ss_true very closely in A, B, C, D, Q, R, S
     # TODO troubleshoot why the noise covariances do not seem to converge to the true values
-
+    print('True noise covariances')
     print(ss_true.Q)
     print(ss_true.R)
     print(ss_true.S)
-
     print('')
-
+    print('Estimated noise covariances')
     print(ss_model_trans.Q)
     print(ss_model_trans.R)
     print(ss_model_trans.S)
+    print('')
 
-    # Check that model transformation has no impact on the performance of the ce compensator
-    compensator = make_compensator(ss_model, None, Y, R)[0]
-    print(compensator)
-    print(compute_performance(A, B, C, Q, R, W, V, compensator.F, compensator.K, compensator.L))
-
-    compensator = make_compensator(ss_model_trans, None, Y, R)[0]
-    print(compensator)
-    print(compute_performance(A, B, C, Q, R, W, V, compensator.F, compensator.K, compensator.L))
+    # # Check that model transformation has no impact on the performance of the ce compensator
+    # compensator = make_compensator(ss_model, None, Y, R)[0]
+    # print(compensator)
+    # print(compute_performance(A, B, C, Q, R, W, V, compensator.F, compensator.K, compensator.L))
+    #
+    # compensator = make_compensator(ss_model_trans, None, Y, R)[0]
+    # print(compensator)
+    # print(compute_performance(A, B, C, Q, R, W, V, compensator.F, compensator.K, compensator.L))
 
     ####################################################################################################################
 
@@ -325,36 +322,36 @@ if __name__ == "__main__":
     for method in methods:
         print("%s    cost = %.6f" % (method, result_dict[method].performance.ihc/result_dict['opt'].performance.ihc))
 
-    print(result_dict['rob'].design_info)
+    # print(result_dict['rob'].design_info)
+    # print(result_dict['rob'].uncertainty.a)
+    # print(result_dict['rob'].uncertainty.b)
+    # print(result_dict['rob'].uncertainty.c)
     # print(result_dict['rob'].ss_models_boot)
-    print(result_dict['rob'].uncertainty.a)
-    print(result_dict['rob'].uncertainty.b)
-    print(result_dict['rob'].uncertainty.c)
     ####################################################################################################################
 
 
     ####################################################################################################################
     ss_models_boot = result_dict['rob'].ss_models_boot
     comparison_response_plot(ss_true, ss_model, ss_models_boot)
-    comparison_closed_loop_plot(result_dict, t_sim=100)
+    comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=50)
     ####################################################################################################################
 
 
-    ####################################################################################################################
-    # Redesign from result data
-    result = result_dict['rob']
-    my_model = result.model
-    uncertainty = result.uncertainty
-    compensator, noise_scale, tag_str_list_cg = make_compensator(my_model, uncertainty, Y, R,
-                                                                 noise_pre_scale=1.0,
-                                                                 noise_post_scale=0.5,
-                                                                 bisection_epsilon=bisection_epsilon)
-    F, K, L = compensator.F, compensator.K, compensator.L
-    performance = compute_performance(A, B, C, Q, R, W, V, F, K, L)
-    for tag in tag_str_list_cg:
-        print(tag)
-    print(performance.ihc/result_dict['opt'].performance.ihc)
-    ####################################################################################################################
+    # ####################################################################################################################
+    # # Redesign from result data
+    # result = result_dict['rob']
+    # my_model = result.model
+    # uncertainty = result.uncertainty
+    # compensator, noise_scale, tag_str_list_cg = make_compensator(my_model, uncertainty, Y, R,
+    #                                                              noise_pre_scale=1.0,
+    #                                                              noise_post_scale=0.5,
+    #                                                              bisection_epsilon=bisection_epsilon)
+    # F, K, L = compensator.F, compensator.K, compensator.L
+    # performance = compute_performance(A, B, C, Q, R, W, V, F, K, L)
+    # for tag in tag_str_list_cg:
+    #     print(tag)
+    # print(performance.ihc/result_dict['opt'].performance.ihc)
+    # ####################################################################################################################
 
 
     ####################################################################################################################

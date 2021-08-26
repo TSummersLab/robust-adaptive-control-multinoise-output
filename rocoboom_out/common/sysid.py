@@ -10,7 +10,7 @@ from sippy.functionsetSIM import rescale, old_div, Vn_mat, K_calc
 
 
 def system_identification(y, u, id_method='N4SID',
-                          tsample=1.0, SS_f=10,  SS_threshold=0.1,
+                          tsample=1.0, SS_f=None,  SS_threshold=0.1,
                           SS_max_order=np.NaN, SS_fixed_order=np.NaN,
                           SS_D_required=False, SS_A_stability=False,
                           return_residuals=False):
@@ -37,6 +37,15 @@ def system_identification(y, u, id_method='N4SID',
         minlength = min(ulength, ylength)
         y = y[:, :minlength]
         u = u[:, :minlength]
+
+    if SS_f is None:
+        if np.isfinite(SS_fixed_order):
+            SS_f = SS_fixed_order
+
+    # if np.isfinite(SS_fixed_order):
+    #     if SS_f < SS_fixed_order:
+    #         print("Warning! The horizon length has been chosen as less than the system order n. "
+    #               "Recommend increasing so SS_f >= n!")
 
     A, B, C, D, Vn, Q, R, S, K, res = OLSims(y, u, SS_f, id_method, SS_threshold,
                                                                SS_max_order, SS_fixed_order,
