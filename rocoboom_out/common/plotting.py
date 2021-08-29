@@ -518,7 +518,7 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
             ydata_dict[control_scheme][field] = {}
             # Preprocessing
             if field in fields_to_normalize_by_cost_are_true:
-                ydata = (output_dict[control_scheme][field] / cost_are_true) - 1.0
+                ydata = (output_dict[control_scheme][field] / cost_are_true)
             elif field in fields_to_mean:
                 ydata = np.mean(output_dict[control_scheme][field], axis=2)
             elif field in fields_to_absmax:

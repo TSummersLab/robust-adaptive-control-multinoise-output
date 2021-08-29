@@ -1,9 +1,11 @@
-import control
+from time import time
+
 import numpy as np
 import numpy.linalg as la
 import numpy.random as npr
 
 from utility.matrixmath import mdot
+from utility.printing import create_tag
 
 from rocoboom_out.common.sysid import system_identification
 from rocoboom_out.common.ss_tools import ss_change_coordinates, groupdot
@@ -19,7 +21,7 @@ class Uncertainty:
         self.Cc = Cc
 
 
-def block_bootstrap(u_hist, y_hist, t=None, Nb=None, blocksize=10):
+def block_bootstrap(u_hist, y_hist, t=None, Nb=None, blocksize=40):
     # Get sizes
     p = y_hist.shape[1]
     m = u_hist.shape[1]
@@ -43,7 +45,7 @@ def block_bootstrap(u_hist, y_hist, t=None, Nb=None, blocksize=10):
                 end = start + blocksize
             else:
                 end = t
-            idx = npr.randint(t-blocksize)+np.arange(blocksize)
+            idx = npr.randint(t-blocksize) + np.arange(blocksize)
             u_boot_hist[i, start:end] = u_hist[idx]
             y_boot_hist[i, start:end] = y_hist[idx]
 
@@ -184,70 +186,80 @@ def ensemble2multnoise(model, u_boot_hist, y_boot_hist, return_models=False, ver
     Bb = np.reshape(SigmaBeigvecs, [n*m, n, m], order='F')  # These uncertainty directions have unit Frobenius norm
     Cc = np.reshape(SigmaCeigvecs, [p*n, p, n], order='F')  # These uncertainty directions have unit Frobenius norm
 
-    uncertainty = Uncertainty(a, Aa, b, Bb, c, Cc)
+    out_dict = {'uncertainty': Uncertainty(a, Aa, b, Bb, c, Cc)}
 
     if return_models:
-        return uncertainty, models_boot
-    else:
-        return uncertainty
+        out_dict['models_boot'] = models_boot
+
+    return out_dict
 
 
 def estimate_model_uncertainty(model, u_hist, y_hist, w_est, v_est, t, Nb,
-                               uncertainty_estimator=None, return_models=False):
+                               uncertainty_estimator=None, return_models=False, log_diagnostics=False):
+    if log_diagnostics:
+        time_start = time()
+        tag_list = []
+
     if uncertainty_estimator is None:
-        return None, None, None, None, None, None
-
-    if uncertainty_estimator == 'exact':
-        raise NotImplementedError
-        # # TODO
-        # # "Cheat" by using the true error as the multiplicative noise
-        # Aa = np.zeros([n*n, n, n])
-        # Bb = np.zeros([n*m, n, m])
-        # Cc = np.zeros([p*n, p, n])
-        # Aa[0] = Adiff/Aerr
-        # Bb[0] = Bdiff/Berr
-        # Cc[0] = Cdiff/Cerr
-        # a = np.zeros(n*n)
-        # b = np.zeros(n*m)
-        # c = np.zeros(p*n)
-        # a[0] = Aerr**2
-        # b[0] = Berr**2
-        # c[0] = Cerr**2
+        out_dict = {'uncertainty': None}
     else:
-        if uncertainty_estimator == 'block_bootstrap':
-            u_boot_hist, y_boot_hist = block_bootstrap(u_hist, y_hist, t, Nb)
-        elif uncertainty_estimator == 'semiparametric_bootstrap':
-            u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_est, v_est, t, Nb)
+        if uncertainty_estimator == 'exact':
+            raise NotImplementedError
+            # # TODO
+            # # "Cheat" by using the true error as the multiplicative noise
+            # Aa = np.zeros([n*n, n, n])
+            # Bb = np.zeros([n*m, n, m])
+            # Cc = np.zeros([p*n, p, n])
+            # Aa[0] = Adiff/Aerr
+            # Bb[0] = Bdiff/Berr
+            # Cc[0] = Cdiff/Cerr
+            # a = np.zeros(n*n)
+            # b = np.zeros(n*m)
+            # c = np.zeros(p*n)
+            # a[0] = Aerr**2
+            # b[0] = Berr**2
+            # c[0] = Cerr**2
         else:
-            raise ValueError('Invalid uncertainty estimator method!')
+            if uncertainty_estimator == 'block_bootstrap':
+                u_boot_hist, y_boot_hist = block_bootstrap(u_hist, y_hist, t, Nb)
+            elif uncertainty_estimator == 'semiparametric_bootstrap':
+                u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_est, v_est, t, Nb)
+            else:
+                raise ValueError('Invalid uncertainty estimator method!')
 
 
-        # TEST/DEBUG ONLY
-        # # this is OK
-        # # CHEAT by passing the true model and true residuals in
-        # # This gives the most accurate assessment of the uncertainty in the model estimate
-        # # because it is almost like getting a brand new dataset for each model sample
-        # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model_true, u_hist, y_hist, w_hist, v_hist, Nb=Nb)
+            # TEST/DEBUG ONLY
+            # # this is OK
+            # # CHEAT by passing the true model and true residuals in
+            # # This gives the most accurate assessment of the uncertainty in the model estimate
+            # # because it is almost like getting a brand new dataset for each model sample
+            # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model_true, u_hist, y_hist, w_hist, v_hist, Nb=Nb)
 
-        # this is OK
-        # # Transform process noise approximately into model coordinates
-        # w_hat_hist = np.zeros_like(w_hist)
-        # v_hat_hist = np.copy(v_hist)
-        # for i in range(T):
-        #     # w_hat_hist[i] = np.dot(P, w_hist[i])
-        #     w_hat_hist[i] = np.dot(la.inv(P), w_hist[i])
-        #
-        # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_hat_hist, v_hat_hist, Nb=Nb)
+            # this is OK
+            # # Transform process noise approximately into model coordinates
+            # w_hat_hist = np.zeros_like(w_hist)
+            # v_hat_hist = np.copy(v_hist)
+            # for i in range(T):
+            #     # w_hat_hist[i] = np.dot(P, w_hist[i])
+            #     w_hat_hist[i] = np.dot(la.inv(P), w_hist[i])
+            #
+            # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_hat_hist, v_hat_hist, Nb=Nb)
 
-        # # This is what we intend to do - true semiparametric bootstrap
-        # # TODO figure out why w_est and v_est are so much smaller in magnitude than w_hist and v_hist
-        # #    can be verified by comparing model.Q vs W and model.R vs V which are the process & sensor noise covariances
-        # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_est, v_est, Nb=Nb)
+            # # This is what we intend to do - true semiparametric bootstrap
+            # # TODO figure out why w_est and v_est are so much smaller in magnitude than w_hist and v_hist
+            # #    can be verified by comparing model.Q vs W and model.R vs V which are the process & sensor noise covariances
+            # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_est, v_est, Nb=Nb)
 
-        # u_boot_hist, y_boot_hist = block_bootstrap(u_hist, y_hist, Nb=100, blocksize=100)
+            # u_boot_hist, y_boot_hist = block_bootstrap(u_hist, y_hist, Nb=100, blocksize=100)
 
 
+            # Form bootstrap model estimates from bootstrap datasets
+            # and convert covariances into multiplicative noises
+            out_dict = ensemble2multnoise(model, u_boot_hist, y_boot_hist, return_models=return_models)
 
-        # Form bootstrap model estimates from bootstrap datasets
-        # and convert covariances into multiplicative noises
-        return ensemble2multnoise(model, u_boot_hist, y_boot_hist, return_models=return_models)
+    if log_diagnostics:
+        time_end = time()
+        time_elapsed = time_end - time_start
+        tag_list.append(create_tag("time to make uncertainty: %f" % time_elapsed))
+        out_dict['tag_list'] = tag_list
+    return out_dict

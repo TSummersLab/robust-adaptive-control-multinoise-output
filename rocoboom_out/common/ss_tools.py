@@ -48,19 +48,19 @@ def ss_change_coordinates(model_tgt, model_src, method='match'):
     # Find a suitable similarity transform matrix P which transforms coordinates from x (source) to xbar (target)
     # i.e. x = P @ xbar
 
-    A = model_tgt.A
-    B = model_tgt.B
-    C = model_tgt.C
-    D = model_tgt.D
+    A = np.asarray(model_tgt.A)
+    B = np.asarray(model_tgt.B)
+    C = np.asarray(model_tgt.C)
+    D = np.asarray(model_tgt.D)
 
-    Abar = model_src.A
-    Bbar = model_src.B
-    Cbar = model_src.C
-    Dbar = model_src.D
+    Abar = np.asarray(model_src.A)
+    Bbar = np.asarray(model_src.B)
+    Cbar = np.asarray(model_src.C)
+    Dbar = np.asarray(model_src.D)
 
-    Qbar = model_src.Q
-    Rbar = model_src.R
-    Sbar = model_src.S
+    Qbar = np.asarray(model_src.Q)
+    Rbar = np.asarray(model_src.R)
+    Sbar = np.asarray(model_src.S)
 
     # Get sizes
     n = A.shape[0]
@@ -69,42 +69,78 @@ def ss_change_coordinates(model_tgt, model_src, method='match'):
 
     if method == 'match':
         # Compute by minimizing the error in statespace matrices A, B, C
-        P = cvx.Variable((n, n))
 
-        # Express squared Frobenius norm using Forbenius norm
-        # cost = cvx.square(cvx.norm(P@Abar - A@P, 'fro'))/A.size \
-        #        + cvx.square(cvx.norm(P@Bbar - B, 'fro'))/B.size \
-        #        + cvx.square(cvx.norm(Cbar - C@P, 'fro'))/C.size
+        weight_A = 1.0
+        weight_B = 1.0
+        weight_C = 1.0
 
-        # Express squared Frobenius norm directly with sum of squares
-        cost = cvx.sum(cvx.square(P@Abar - A@P)) \
-               + cvx.sum(cvx.square(P@Bbar - B)) \
-               + cvx.sum(cvx.square(Cbar - C@P))
+        # weight_A = 1.0/A.size
+        # weight_B = 1.0/B.size
+        # weight_C = 1.0/C.size
 
-        objective = cvx.Minimize(cost)
-        constraints = []
-        prob = cvx.Problem(objective, constraints)
-        prob.solve()
-        P = P.value
+        # # Solution using CVX
+        # P = cvx.Variable((n, n))
+        #
+        # # Express squared Frobenius norm using Frobenius norm
+        # cost =   weight_A*cvx.square(cvx.norm(P@Abar - A@P, 'fro')) \
+        #        + weight_B*cvx.square(cvx.norm(P@Bbar - B, 'fro')) \
+        #        + weight_C*cvx.square(cvx.norm(Cbar - C@P, 'fro'))
+        #
+        # # Express squared Frobenius norm directly with sum of squares
+        # cost =   weight_A*cvx.sum(cvx.square(P@Abar - A@P)) \
+        #        + weight_B*cvx.sum(cvx.square(P@Bbar - B)) \
+        #        + weight_C*cvx.sum(cvx.square(Cbar - C@P))
+        #
+        # objective = cvx.Minimize(cost)
+        # constraints = []
+        # prob = cvx.Problem(objective, constraints)
+        # prob.solve()
+        # P = P.value
 
         # TODO investigate whether this Jacobi-type algorithm can be used to solve the problem more quickly
+        #   -seems only valid for systems with full rank C matrix
         # https://ieeexplore.ieee.org/document/6669166
 
-        # # TODO recheck expression, it is not matching the CVX solution...
-        # # Solve the problem in closed form via vectorization, Kronecker products
-        # I = np.eye(n)
-        # G = 2*np.kron(np.dot(Abar, Abar.T), I) \
-        #     - np.kron(A.T, Abar.T) \
-        #     - np.kron(Abar.T, A.T) \
-        #     - np.kron(A, Abar) \
-        #     - np.kron(Abar, A) \
-        #     + 2*np.kron(I, np.dot(A.T, A)) \
-        #     + 2*np.kron(np.dot(Bbar, Bbar.T), I) \
-        #     + 2*np.kron(I, np.dot(Cbar.T, Cbar))
-        # H = np.dot(B, Bbar.T) + np.dot(Bbar, B.T) + np.dot(Cbar.T, C) + np.dot(C.T, Cbar)
-        # vH = vec(H)
-        # vP = la.solve(G, vH)
-        # P2 = mat(vP)
+        # Solution in closed form via vectorization, Kronecker products (this is a generalized Lyapunov equation)
+        I = np.eye(n)
+        G = np.kron(weight_A*np.dot(Abar, Abar.T) + weight_B*np.dot(Bbar, Bbar.T), I) \
+            + np.kron(I, weight_A*np.dot(A.T, A) + weight_C*np.dot(C.T, C)) \
+            - weight_A*np.kron(Abar.T, A.T) - weight_A*np.kron(Abar, A)
+        H = weight_B*np.dot(B, Bbar.T) + weight_C*np.dot(C.T, Cbar)
+        vH = vec(H)
+        vP = la.solve(G, vH)
+        P = mat(vP)
+
+        # DEBUG
+        # Verify solution is a critical point
+        from autograd import grad
+        import autograd.numpy as anp
+
+        # Manual expression for gradient
+        def g_manual(x):
+            P = mat(x)
+
+            A_term = 2*anp.dot(P, anp.dot(Abar, Abar.T)) - 2*anp.dot(A, anp.dot(P, Abar.T)) - 2*anp.dot(A.T, anp.dot(P, Abar)) + 2*anp.dot(anp.dot(A.T, A), P)
+            B_term = 2*anp.dot(P, anp.dot(Bbar, Bbar.T)) - 2*anp.dot(B, Bbar.T)
+            C_term = 2*anp.dot(anp.dot(C.T, C), P) - 2*anp.dot(C.T, Cbar)
+            return vec(weight_A*A_term + weight_B*B_term + weight_C*C_term)
+
+        def myobj(x):
+            P = mat(x)
+
+            A_term = anp.sum(anp.square(anp.dot(P, Abar) - anp.dot(A, P)))
+            B_term = anp.sum(anp.square(anp.dot(P, Bbar) - B))
+            C_term = anp.sum(anp.square(Cbar - anp.dot(C, P)))
+            return weight_A*A_term + weight_B*B_term + weight_C*C_term
+
+        # print(myobj(vec(P)))
+
+        # g_auto = grad(myobj)
+        #
+        # gval1 = g_auto(vec(P))  # should be zero
+        # gval2 = g_manual(vec(P))  # should be zero
+        # zzz = 0
+
 
     elif method in ['reachable', 'observable', 'modal']:
         ss_model_src = make_ss(model_src.A, model_src.B, model_src.C)

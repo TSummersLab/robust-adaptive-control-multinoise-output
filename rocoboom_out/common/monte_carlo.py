@@ -48,11 +48,13 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     R = required_args['R']
     W = required_args['W']
     V = required_args['V']
+    U = required_args['U']
     Ns = required_args['Ns']
     Nb = required_args['Nb']
     T = required_args['T']
     x0 = required_args['x0']
     bisection_epsilon = required_args['bisection_epsilon']
+    t_evals = required_args['t_evals']
     t_start_estimate = required_args['t_start_estimate']
     t_explore = required_args['t_explore']
     t_cost_fh = required_args['t_cost_fh']
@@ -111,23 +113,26 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     Cerr_hist = np.full(T, np.inf)
 
 
-
     # Loop over time
     for t in range(T):
         if log_diagnostics:
-            stable_str = printcolors.Green+'Stabilized'+printcolors.Default
-            tag_str_list = []
+            tag_list = []
 
         # Only use the training data we have observed up until now (do not cheat by looking ahead into the full history)
 
-        if t < t_start_estimate:
-            u_str = "Explore"
-        else:
-            if not t in t_evals:
-                cost_future_hist[t] = -1
-                continue
+        if not t in t_evals:
+            cost_future_hist[t] = -1
+            continue
 
-            print(t)
+        if t < t_start_estimate:
+            # Exploring
+            u_str = "Explore"
+            stable_str = printcolors.LightGray + 'Stable N/A' + printcolors.Default
+        else:
+            # Exploit estimated model
+            u_str = "Exploit"
+            # print(t)
+
             # Start generating model and uncertainty estimates once there is enough data to get non-degenerate estimates
             # Estimate state space model from input-output data via subspace ID using the SIPPY package
             model, res = system_identification(y_train_hist[0:t], u_train_hist[0:t], id_method='N4SID',
@@ -146,8 +151,10 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
 
             # Estimate model uncertainty
             if control_scheme == 'robust':
-                uncertainty = estimate_model_uncertainty(model, u_train_hist, y_train_hist, w_est, v_est, t, Nb,
-                                                                 uncertainty_estimator)
+                uncertainty_dict = estimate_model_uncertainty(model, u_train_hist, y_train_hist, w_est, v_est, t, Nb,
+                                                              uncertainty_estimator)
+
+                uncertainty = uncertainty_dict['uncertainty']
                 # Record multiplicative noise history
                 a_hist[t] = uncertainty.a
                 b_hist[t] = uncertainty.b
@@ -158,9 +165,6 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             else:
                 uncertainty = None
 
-            # Exploit estimated model
-            if log_diagnostics:
-                u_str = 'Exploit'
 
 
             # # TODO do the same thing with the C matrix, observable
@@ -169,16 +173,16 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             # ctrb_tol = 1e-4
             # while minsv(ctrb(Ahat, Bhat)) < ctrb_tol:
             #     if log_diagnostics:
-            #         tag_str_list.append(create_tag('Estimated system uncontrollable, adjusted Bhat'))
+            #         tag_list.append(create_tag('Estimated system uncontrollable, adjusted Bhat'))
             #     Bhat += 0.00001*npr.randn(n, m)
 
-            compensator, gamma_reduction, tag_str_list_cg = make_compensator(model, uncertainty, Y, R,
-                                                                         noise_pre_scale, noise_post_scale,
-                                                                         bisection_epsilon, log_diagnostics)
+            compensator, gamma_reduction, tag_list_cg = make_compensator(model, uncertainty, Y, R,
+                                                                             noise_pre_scale, noise_post_scale,
+                                                                             bisection_epsilon, log_diagnostics)
             F, K, L = compensator.F, compensator.K, compensator.L
             gamma_reduction_hist[t] = gamma_reduction
             if log_diagnostics:
-                tag_str_list += tag_str_list_cg
+                tag_list += tag_list_cg
 
 
             # # Compute exploration control component
@@ -205,7 +209,9 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             specrad_hist[t], cost_future_hist[t] = performance.sr, performance.ihc
             if log_diagnostics:
                 if specrad_hist[t] > 1:
-                    stable_str = printcolors.Red+'Unstable'+printcolors.Default
+                    stable_str = printcolors.Red + 'Unstable' + printcolors.Default
+                else:
+                    stable_str = printcolors.Green + 'Stable' + printcolors.Default
 
             # Record compensator
             # TODO Ahat, Bhat, Chat, What, Vhat, maybe F
@@ -215,7 +221,7 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
 
         # if log_diagnostics:
         #     if la.norm(x_test) > 1e4:
-        #         tag_str_list.append(create_tag('x_test = %e > 1e3' % (la.norm(x_test)), message_type='fail'))
+        #         tag_list.append(create_tag('x_test = %e > 1e3' % (la.norm(x_test)), message_type='fail'))
 
         # # Accumulate cost
         # if testing_type == 'online':
@@ -249,11 +255,12 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             time_whole_str = ''
             time_header_str = "Time = %4d  %s. %s." % (t, u_str, stable_str)
             time_whole_str += time_header_str + '\n'
-            for tag_str in tag_str_list:
-                time_whole_str += tag_str + '\n'
+            for tag in tag_list:
+                time_whole_str += tag + '\n'
             log_str += time_whole_str
         if print_diagnostics:
             print(time_whole_str)
+
     if log_diagnostics:
         code_end_time = time()
         code_elapsed_time = code_end_time - code_start_time
@@ -438,7 +445,7 @@ def compute_derived_data(output_dict, receding_horizon=5):
         output_dict[control_scheme]['regret_ratio_hist_accum'] = regret_ratio_hist_accum
 
 
-def mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
+def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_post_scale,
             cost_horizon, horizon_method, t_cost_fh, system_idx, system_kwargs, seed, parallel_option):
     # Set up output directory
     timestr = str(time()).replace('.', 'p')
@@ -450,9 +457,9 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
     npr.seed(seed)
 
     # Problem data
-    n, m, p, A, B, C, D, Y, Q, R, W, V = gen_system_omni(system_idx, **system_kwargs)
+    n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx, **system_kwargs)
     filename_out = 'system_dict.pickle'
-    save_system(n, m, p, A, B, C, D, Y, Q, R, W, V, dirname_out, filename_out)
+    save_system(n, m, p, A, B, C, D, Y, Q, R, W, V, U, dirname_out, filename_out)
     model_true = make_ss(A, B, C, D)
 
     # Catch numerical error-prone case when system is open-loop unstable and not using control during training
@@ -468,7 +475,7 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
     # IMPORTANT: cannot compare gains directly because the internal state representation is different
     # Only compare closed-loop transfer functions or closed-loop performance cost
     Popt, Kopt = dare_gain(A, B, Q, R)
-    Sopt, Lopt = dare_gain(A.T, C.T, W, V)
+    Sopt, Lopt = dare_gain(A.T, C.T, W, V, E=None, S=U)
     Lopt = -Lopt.T
 
     Fopt = sysmat_cl(A, B, C, Kopt, Lopt)
@@ -545,11 +552,13 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
                      'R': R,
                      'W': W,
                      'V': V,
+                     'U': U,
                      'Ns': Ns,
                      'Nb': Nb,
                      'T': T,
                      'x0': x0,
                      'bisection_epsilon': bisection_epsilon,
+                     't_evals': t_evals,
                      't_start_estimate': t_start_estimate,
                      't_explore': t_explore,
                      't_cost_fh': t_cost_fh,
@@ -576,12 +585,13 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
 
     compute_derived_data(output_dict)
 
-    # # Export relevant data
+    # Export relevant data
     # filename_out = training_type+'_training_'+testing_type+'_testing_'+'comparison_results'+'.pickle'
-    # data_out = [output_dict, cost_are_true, t_hist, t_explore]
-    # pickle_export(dirname_out, filename_out, data_out)
+    filename_out = 'comparison_results' + '.pickle'
+    data_out = [output_dict, cost_are_true, t_hist, t_start_estimate, t_evals]
+    pickle_export(dirname_out, filename_out, data_out)
 
-    return output_dict, cost_are_true, t_hist, t_start_estimate, t_evals
+    return output_dict, cost_are_true, t_hist, t_start_estimate
 
 
 if __name__ == "__main__":
@@ -598,14 +608,18 @@ if __name__ == "__main__":
 
     # Number of Monte Carlo samples
     # Ns = 100000
+    Ns = 1000
     # Ns = 10
-    Ns = 2
+    # Ns = 2
 
     # Number of bootstrap samples
+    # Nb = 100
     Nb = 50
+    # Nb = 20
 
     # Simulation time
-    t_evals = np.arange(200, 300+1, 50)
+    t_evals = np.array([200, 400, 800])
+    # t_evals = np.arange(200, 300+1, 50)
     # t_evals = np.arange(200, 600+1, 50)
     T = np.max(t_evals)+1
 
@@ -631,7 +645,8 @@ if __name__ == "__main__":
 
     # System to choose
     # system_idx = 'scalar'
-    system_idx = 'rand'
+    # system_idx = 'rand'
+    system_idx = 1
 
     if system_idx == 'scalar':
         system_kwargs = dict(A=1, B=1, Q=1, R=0, W=1, V=0.1)
@@ -642,11 +657,11 @@ if __name__ == "__main__":
         system_kwargs = dict()
 
     # Parallel computation option
-    parallel_option = 'serial'
-    # parallel_option = 'parallel'
+    # parallel_option = 'serial'
+    parallel_option = 'parallel'
 
     # Run main
-    output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = mainfun(uncertainty_estimator, Ns, Nb, T, noise_pre_scale, noise_post_scale,
+    output_dict, cost_are_true, t_hist, t_start_estimate = mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_post_scale,
                           cost_horizon, horizon_method, t_cost_fh, system_idx, system_kwargs, seed, parallel_option)
 
 

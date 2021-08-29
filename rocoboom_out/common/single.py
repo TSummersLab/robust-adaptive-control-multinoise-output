@@ -46,14 +46,33 @@ def get_result(method):
 
     elif method == 'rob':
         uncertainty_estimator = 'semiparametric_bootstrap'
-        uncertainty, ss_models_boot = estimate_model_uncertainty(model, u_train_hist, y_train_hist, w_est, v_est, t, Nb,
-                                                                 uncertainty_estimator, return_models=True)
+        # uncertainty_estimator = 'block_bootstrap'
+        uncertainty_dict = estimate_model_uncertainty(model, u_train_hist, y_train_hist, w_est, v_est, t, Nb,
+                                                      uncertainty_estimator, return_models=True, log_diagnostics=True)
+
+        # TODO DEBUG ONLY
+        # CHEAT by using the true model and true residuals in the semiparametric bootstrap
+        # uncertainty_estimator = 'semiparametric_bootstrap'
+        # uncertainty_dict = estimate_model_uncertainty(ss_true, u_train_hist, y_train_hist,
+        #                                                                           w_hist, v_hist, t, Nb,
+        #                                                                           uncertainty_estimator,
+        #                                                                           return_models=True,
+        #                                                                           log_diagnostics=True)
+
+        uncertainty = uncertainty_dict['uncertainty']
+        ss_models_boot = uncertainty_dict['models_boot']
+        tag_list_uc = uncertainty_dict['tag_list']
+
+        for tag in tag_list_uc:
+            print(tag)
         my_model = ss_model
     else:
         raise ValueError
 
     compensator, noise_scale, tag_str_list_cg = make_compensator(my_model, uncertainty, Y, R,
-                                                                 noise_pre_scale, noise_post_scale, bisection_epsilon)
+                                                                 noise_pre_scale, noise_post_scale, bisection_epsilon, log_diagnostics=True)
+    for tag in tag_str_list_cg:
+        print(tag)
     F, K, L = compensator.F, compensator.K, compensator.L
 
     performance = compute_performance(A, B, C, Q, R, W, V, F, K, L)
@@ -86,9 +105,13 @@ def response_plot(ss, T=None, fig=None, axs=None, response_type='impulse', *args
     return fig, axs
 
 
-def comparison_response_plot(ss_true, ss_model, ss_models_boot, T_resp=50, num_models_boot_to_plot=100):
-    fig, axs = response_plot(ss_true, T_resp, alpha=0.7, zorder=10, label='true')
-    fig, axs = response_plot(ss_model, T_resp, fig, axs, alpha=0.7, zorder=11, label='nominal')
+def comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=None, num_models_boot_to_plot=100):
+    # Simulation time
+    if t_sim is None:
+        t_sim = T
+
+    fig, axs = response_plot(ss_true, t_sim, alpha=0.7, zorder=10, label='true')
+    fig, axs = response_plot(ss_model, t_sim, fig, axs, alpha=0.7, zorder=11, label='nominal')
 
     for i, ss_model_boot in enumerate(ss_models_boot):
         if i > num_models_boot_to_plot:
@@ -97,7 +120,7 @@ def comparison_response_plot(ss_true, ss_model, ss_models_boot, T_resp=50, num_m
             label = 'boot'
         else:
             label = None
-        fig, axs = response_plot(ss_model_boot, T_resp, fig, axs, color='k', alpha=0.1, zorder=1, label=label)
+        fig, axs = response_plot(ss_model_boot, t_sim, fig, axs, color='k', alpha=0.1, zorder=1, label=label)
 
     for i in range(p):
         for j in range(m):
@@ -279,8 +302,8 @@ if __name__ == "__main__":
     # Cannot use this practically since ss_true is not accessible
     ss_model_trans, P = ss_change_coordinates(ss_true, model, method='match')
 
-    # With lots of data, ss_model_trans should match ss_true very closely in A, B, C, D, Q, R, S
-    # TODO troubleshoot why the noise covariances do not seem to converge to the true values
+    # With lots of data, ss_model_trans should match ss_true very closely in A, B, C, D
+    # but Q, R, S cannot be identified uniquely - see subspace ID book pg 66
     print('True noise covariances')
     print(ss_true.Q)
     print(ss_true.R)
@@ -332,8 +355,8 @@ if __name__ == "__main__":
 
     ####################################################################################################################
     ss_models_boot = result_dict['rob'].ss_models_boot
-    comparison_response_plot(ss_true, ss_model, ss_models_boot)
-    comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=50)
+    comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=20)
+    comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=20)
     ####################################################################################################################
 
 

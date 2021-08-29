@@ -61,9 +61,9 @@ def make_ce_compensator(model, Y, R):
 
 
 def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_scale=1.0,
-                     bisection_epsilon=0.01, log_diagnostics=True):
-
-    time_start = time()
+                     bisection_epsilon=0.01, log_diagnostics=False):
+    if log_diagnostics:
+        time_start = time()
 
     # Model information
     A = model.A
@@ -81,7 +81,7 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
     # Penalty information
     Q = np.dot(C.T, np.dot(Y, C))  # Convert output penalty to state penalty in model coordinates
 
-    tag_str_list = []
+    tag_list = []
 
     # TODO account for correlation between A, B, C multiplicative noises in gdare
     # TODO include the (estimated) cross-covariance model.S between additive process & measurement noise in the gdare
@@ -127,7 +127,8 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
             cs_upr = 1.0
             cs_lwr = 0.0
             while cs_upr - cs_lwr > bisection_epsilon:
-                print(cs_lwr, cs_upr)
+                if log_diagnostics:
+                    tag_list.append(create_tag("[bisection_lwr    bisection_upr] = [%.6f    %.6f]" % (cs_lwr, cs_upr)))
                 cs_mid = (cs_upr + cs_lwr)/2
                 scale = cs_mid*noise_pre_scale
                 sysdata = make_sysdata(scale=scale)
@@ -141,26 +142,25 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
             scale = cs_lwr*noise_pre_scale
 
             if log_diagnostics:
-                tag_str_list.append(create_tag('Scaled noise variance by %.6f' % scale))
+                tag_list.append(create_tag('Scaled noise variance by %.6f' % scale))
 
             if scale > 0:
                 sysdata = make_sysdata(scale=scale)
                 X = solve_gdare(sysdata, X0)
                 if X is None:
                     if log_diagnostics:
-                        tag_str_list.append(create_tag('GAIN NOT FOUND BY DARE_MULT, INCREASE SOLVER PRECISION',
-                                                       message_type='fail'))
-                        tag_str_list.append(create_tag('Falling back on cert-equiv gain',
-                                                       message_type='fail'))
+                        tag_list.append(create_tag('GAIN NOT FOUND BY DARE_MULT, INCREASE SOLVER PRECISION',
+                                                   message_type='fail'))
+                        tag_list.append(create_tag('Falling back on cert-equiv gain', message_type='fail'))
                     compensator = make_ce_compensator(model, Y, R)
                     scale = 0.0
-                    return compensator, scale, tag_str_list
+                    return compensator, scale, tag_list
             else:
                 if log_diagnostics:
-                    tag_str_list.append(create_tag('Bisection collapsed to cert-equiv'))
+                    tag_list.append(create_tag('Bisection collapsed to cert-equiv'))
                 compensator = make_ce_compensator(model, Y, R)
                 scale = 0.0
-                return compensator, scale, tag_str_list
+                return compensator, scale, tag_list
 
         if noise_post_scale < 1:
             scale = cs_lwr*noise_pre_scale*noise_post_scale
@@ -180,7 +180,8 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
 
         compensator = Compensator(F, K, L)
 
-    time_end = time()
-    time_elapsed = time_end - time_start
-    print("time to make compensator: %f" % time_elapsed)
-    return compensator, scale, tag_str_list
+    if log_diagnostics:
+        time_end = time()
+        time_elapsed = time_end - time_start
+        tag_list.append(create_tag("time to make compensator: %f" % time_elapsed))
+    return compensator, scale, tag_list
