@@ -98,7 +98,7 @@ def ss_change_coordinates(model_tgt, model_src, method='match'):
         # P = P.value
 
         # TODO investigate whether this Jacobi-type algorithm can be used to solve the problem more quickly
-        #   -seems only valid for systems with full rank C matrix
+        #   --seems only valid for systems with full rank C matrix, so we cannot use here
         # https://ieeexplore.ieee.org/document/6669166
 
         # Solution in closed form via vectorization, Kronecker products (this is a generalized Lyapunov equation)
@@ -111,27 +111,27 @@ def ss_change_coordinates(model_tgt, model_src, method='match'):
         vP = la.solve(G, vH)
         P = mat(vP)
 
-        # DEBUG
-        # Verify solution is a critical point
-        from autograd import grad
-        import autograd.numpy as anp
-
-        # Manual expression for gradient
-        def g_manual(x):
-            P = mat(x)
-
-            A_term = 2*anp.dot(P, anp.dot(Abar, Abar.T)) - 2*anp.dot(A, anp.dot(P, Abar.T)) - 2*anp.dot(A.T, anp.dot(P, Abar)) + 2*anp.dot(anp.dot(A.T, A), P)
-            B_term = 2*anp.dot(P, anp.dot(Bbar, Bbar.T)) - 2*anp.dot(B, Bbar.T)
-            C_term = 2*anp.dot(anp.dot(C.T, C), P) - 2*anp.dot(C.T, Cbar)
-            return vec(weight_A*A_term + weight_B*B_term + weight_C*C_term)
-
-        def myobj(x):
-            P = mat(x)
-
-            A_term = anp.sum(anp.square(anp.dot(P, Abar) - anp.dot(A, P)))
-            B_term = anp.sum(anp.square(anp.dot(P, Bbar) - B))
-            C_term = anp.sum(anp.square(Cbar - anp.dot(C, P)))
-            return weight_A*A_term + weight_B*B_term + weight_C*C_term
+        # # DEBUG
+        # # Verify solution is a critical point
+        # from autograd import grad
+        # import autograd.numpy as anp
+        #
+        # # Manual expression for gradient
+        # def g_manual(x):
+        #     P = mat(x)
+        #
+        #     A_term = 2*anp.dot(P, anp.dot(Abar, Abar.T)) - 2*anp.dot(A, anp.dot(P, Abar.T)) - 2*anp.dot(A.T, anp.dot(P, Abar)) + 2*anp.dot(anp.dot(A.T, A), P)
+        #     B_term = 2*anp.dot(P, anp.dot(Bbar, Bbar.T)) - 2*anp.dot(B, Bbar.T)
+        #     C_term = 2*anp.dot(anp.dot(C.T, C), P) - 2*anp.dot(C.T, Cbar)
+        #     return vec(weight_A*A_term + weight_B*B_term + weight_C*C_term)
+        #
+        # def myobj(x):
+        #     P = mat(x)
+        #
+        #     A_term = anp.sum(anp.square(anp.dot(P, Abar) - anp.dot(A, P)))
+        #     B_term = anp.sum(anp.square(anp.dot(P, Bbar) - B))
+        #     C_term = anp.sum(anp.square(Cbar - anp.dot(C, P)))
+        #     return weight_A*A_term + weight_B*B_term + weight_C*C_term
 
         # print(myobj(vec(P)))
 

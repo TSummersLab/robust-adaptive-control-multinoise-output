@@ -109,7 +109,7 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
             # Prep data for GDARE solver
             return dict(A=A, B=B, C=C,  # Mean
                         a=scale*a, Aa=Aa, b=scale*b, Bb=Bb, c=scale*c, Cc=Cc,  # Variance
-                        Q=Q, R=R, W=W, V=V,  # Penalties
+                        Q=Q, R=R, W=W, V=V, U=U,  # Penalties
                         n=n, m=m, p=p)  # Dimensions
         cs_lwr = 1.0
         scale = cs_lwr*noise_pre_scale

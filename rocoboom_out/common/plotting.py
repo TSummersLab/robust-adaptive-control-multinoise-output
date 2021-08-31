@@ -1,7 +1,12 @@
 """
 Plotting functions
 """
-# Authors: Ben Gravell and Tyler Summers
+
+
+from copy import copy
+from warnings import warn
+from time import sleep
+import os
 
 import numpy as np
 import numpy.linalg as la
@@ -13,10 +18,8 @@ from matplotlib.cm import get_cmap
 
 from utility.matrixmath import specrad
 
-from copy import copy
-from warnings import warn
-from time import sleep
-import os
+
+BIG = 1e100  # A big number to replace np.inf for plotting purposes
 
 
 def compute_transparencies(quantiles, quantile_fill_alpha):
@@ -32,406 +35,410 @@ def compute_transparencies(quantiles, quantile_fill_alpha):
     return quantile_alphas
 
 
-def comparison_plot(output_dict, cost_are_true, t_hist, t_start_estimate, plot_fields,
-                    plotfun_str='plot', xscale='linear', yscale='symlog',
-                    show_mean=True, show_median=True, show_trimmed_mean=True, show_quantiles=True,
-                    show_samples=True,
-                    sample_idx_list=None, sample_legend=False,
-                    trim_mean_quantile=None, quantiles=None, quantile_fill_alpha=0.2, quantile_color='tab:blue',
-                    quantile_region='middle', quantile_style='fill', quantile_legend=False,
-                    comparative=True, stat_diff_type='diff_of_stat',
-                    grid=True, show_guideline=True, zoom=False, match_ylims=True,
-                    maximize_window=False, figsize=(12, 10)):
-    """
-    Plot comparison of results using two different control schemes.
-    :param output_dict: Dictionary of data history dictionaries associated with each control scheme
-    :param cost_are_true: True optimal ARE cost
-    :param t_hist: Time history, 1D numpy array
-    :param t_start_estimate: The time when model estimates started being generated
-    :param plot_fields: List of data fields to plot
-    :param plotfun_str: What line plot style to use. Valid values are 'plot', 'step'
-    :param xscale: String to pass to matplotlib.pyplot ax.yscale
-    :param yscale: String to pass to matplotlib.pyplot ax.yscale
-    :param show_mean: Boolean
-    :param show_median: Boolean
-    :param show_trimmed_mean: Boolean
-    :param show_quantiles: Boolean
-    :param trim_mean_quantile: Quantile to use in computing the trimmed mean, float
-    :param quantiles: Quantile levels, list of floats between 0 and 1
-    :param quantile_fill_alpha: Transparency of quantile fill regions, float
-    :param quantile_color: Color of quantile fill regions or lines, string
-    :param quantile_region: Set the quantile plot region. Valid values are 'upper', 'lower', 'middle'
-    :param quantile_style: Set the quantile plot style. Valid values are 'fill' or 'plot'
-    :param quantile_legend: Set whether to include quantiles in legend, boolean
-    :param comparative: Set whether to show the difference between the first and second algorithm data, boolean
-    :param stat_diff_type: Set the statistic difference calculation method.
-                           Valid values are 'diff_of_stat', 'stat_of_diff'
-    :param grid: Show the plot grid, boolean
-    :param show_guideline: Show a guideline at 0 or 1 depending on plotted field, boolean
-    :param zoom: Zoom the plot, useful for clipping large max/min, boolean
-    :param match_ylims: Set whether to set y limits the same for both algorithms' plots, boolean
-    :param maximize_window: Boolean
-    :param figsize: Figure window size, passed to matplotlib.pyplot figure. Ex. 2-tuple (width, height) in inches
-    """
-
-    # Number columns in the subplots
-    if len(output_dict) == 1:
-        ncols = 1
-        if comparative:
-            warn('Requested comparative plot with single data set, ignoring comparison.')
-    elif len(output_dict) == 2 and not comparative:
-        ncols = 2
-    elif len(output_dict) == 2 and comparative:
-        ncols = 3
-
-    # Number columns in the subplots
-    nrows = len(plot_fields)
-
-    # Number of Monte Carlo samples
-    control_schemes = list(output_dict.keys())
-    Ns = output_dict[control_schemes[0]][plot_fields[0]].shape[0]
-
-    # Set sample indices
-    if sample_idx_list is None:
-        sample_idx_list = []
-    elif sample_idx_list == 'all':
-        sample_idx_list = [i for i in range(Ns)]
-
-    # Set quantile levels
-    if quantiles is None:
-        # quantiles = [1.00, 0.975, 0.875, 0.75, 0.625]
-        quantiles = [1.00, 0.999, 0.99, 0.975, 0.875, 0.75]
-        # quantiles = [1.00, 0.99, 0.95]
-    quantiles = np.array(quantiles)
-
-    # Set quantile level for trimmed mean
-    if trim_mean_quantile is None:
-        trim_mean_quantile = np.max(quantiles[quantiles < 1])
-
-    # Manually compute alphas of overlapping regions for legend patches
-    quantile_alphas = compute_transparencies(quantiles, quantile_fill_alpha)
-
-    # Process history data for plotting
-    fields_to_normalize_by_cost_are_true = ['cost_future_hist']
-    fields_to_mean = ['a_hist', 'b_hist']
-    fields_to_absmax = []
-    fields_to_vecnorm = ['x_train_hist', 'x_test_hist', 'u_train_hist', 'u_test_hist', 'x_opt_test_hist']
-    fields_to_fronorm = ['K_hist']
-    fields_to_truncate = ['x_train_hist', 'x_test_hist', 'x_opt_test_hist']
-
-    # Make the list of statistic names
-    statistics = ['ydata', 'mean', 'trimmed_mean', 'median']
-    for quantile in quantiles:
-        statistics.append('quantile_'+str(quantile))
-        statistics.append('quantile_'+str(1-quantile))
-
-    # Build the ydata dictionary from output_dict
-    ydata_dict = {}
-    for control_scheme in control_schemes:
-        ydata_dict[control_scheme] = {}
-        for field in plot_fields:
-            ydata_dict[control_scheme][field] = {}
-            # Preprocessing
-            if field in fields_to_normalize_by_cost_are_true:
-                ydata = output_dict[control_scheme][field] / cost_are_true
-            elif field in fields_to_mean:
-                ydata = np.mean(output_dict[control_scheme][field], axis=2)
-            elif field in fields_to_absmax:
-                ydata = np.max(np.abs(output_dict[control_scheme][field]), axis=2)
-            elif field in fields_to_vecnorm:
-                ydata = la.norm(output_dict[control_scheme][field], axis=2)
-            elif field in fields_to_fronorm:
-                ydata = la.norm(output_dict[control_scheme][field], ord='fro', axis=(2,3))
-            else:
-                ydata = output_dict[control_scheme][field]
-            if field in fields_to_truncate:
-                ydata = ydata[:,:-1]
-            # Convert nan to inf
-            ydata[np.isnan(ydata)] = np.inf
-            # Store processed data
-            ydata_dict[control_scheme][field]['ydata'] = ydata
-            # Compute statistics
-            ydata_dict[control_scheme][field]['mean'] = np.mean(ydata, axis=0)
-            ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata, proportiontocut=1-trim_mean_quantile, axis=0)
-            ydata_dict[control_scheme][field]['median'] = np.median(ydata, axis=0)
-            for quantile in quantiles:
-                ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata, quantile, axis=0)
-                ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata, 1-quantile, axis=0)
-            # Compute particular samples' data
-            for sample_idx in sample_idx_list:
-                ydata_dict[control_scheme][field]['sample_'+str(sample_idx)] = ydata[sample_idx]
-
-    # Compute statistic differences
-    if len(output_dict) == 2 and comparative:
-        control_scheme = control_schemes[0] + ' minus ' + control_schemes[1]
-        control_schemes.append(control_scheme)
-        ydata_dict[control_scheme] = {}
-        for field in plot_fields:
-            ydata_dict[control_scheme][field] = {}
-            for statistic in statistics:
-                # Choose whether to calculate statistics before or after taking the difference
-                if stat_diff_type == 'diff_of_stat':
-                    stat1 = ydata_dict[control_schemes[0]][field][statistic]
-                    stat2 = ydata_dict[control_schemes[1]][field][statistic]
-                    ydata_dict[control_scheme][field][statistic] =  stat1 - stat2
-                elif stat_diff_type == 'stat_of_diff':
-                    #TODO: reuse statistic computation code above
-                    ydata1 = ydata_dict[control_schemes[0]][field]['ydata']
-                    ydata2 = ydata_dict[control_schemes[1]][field]['ydata']
-                    ydata_diff = ydata1 - ydata2
-                    ydata_dict[control_scheme][field]['ydata'] = ydata_diff
-                    # Compute statistics
-                    ydata_dict[control_scheme][field]['median'] = np.median(ydata_diff, axis=0)
-                    ydata_dict[control_scheme][field]['mean'] = np.mean(ydata_diff, axis=0)
-                    ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata_diff, proportiontocut=1-trim_mean_quantile, axis=0)
-                    for quantile in quantiles:
-                        ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata_diff, quantile, axis=0)
-                        ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata_diff, 1-quantile, axis=0)
-            # Compute particular samples' data
-            for sample_idx in sample_idx_list:
-                ydata_dict[control_scheme][field]['sample_'+str(sample_idx)] = ydata_diff[sample_idx]
-
-    # Initialize figure and axes
-    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, sharex=True, sharey='row')
-
-    # x start index
-    x_start_idx = t_start_estimate
-
-    # Plot each data series
-    for j_col, control_scheme in enumerate(control_schemes):
-        for i_row, field in enumerate(plot_fields):
-            quantile_region_restore = copy(quantile_region)
-            # if j_col == 2:
-            #     quantile_region = 'middle'
-            # Choose the plotting function
-            if plotfun_str == 'plot':
-                plotfun = ax[i_row, j_col].plot
-                fbstep = None
-            elif plotfun_str == 'step':
-                plotfun = ax[i_row, j_col].step
-                fbstep = 'pre'
-            legend_handles = []
-            legend_labels = []
-
-            # Plot mean
-            if show_mean:
-                artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['mean'], color='k', lw=2, zorder=120)
-                legend_handles.append(artist)
-                legend_labels.append("Mean")
-
-            # Plot trimmed mean
-            if show_trimmed_mean:
-                artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['trimmed_mean'], color='tab:grey', lw=2, zorder=130)
-                legend_handles.append(artist)
-                legend_labels.append("Trimmed mean, middle %.0f%%" % (100*(1-((1-trim_mean_quantile)*2))))
-
-            # Plot median
-            if show_median:
-                artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['median'], color='b', lw=2, zorder=110)
-                legend_handles.append(artist)
-                legend_labels.append("Median")
-
-            if field == 'gamma_reduction_hist':
-                quantile_region = 'middle'
-
-            # Plot quantiles
-            if j_col == 2 and stat_diff_type == 'diff_of_stat':
-                quantile_style = 'plot'
-            if show_quantiles:
-                qi = 0
-                if quantile_style == 'fill':
-                    for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
-                        if quantile_region == 'upper':
-                            y_lwr = ydata_dict[control_scheme][field]['median']
-                        else:
-                            y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)]
-                        if quantile_region == 'lower':
-                            y_upr = ydata_dict[control_scheme][field]['median']
-                        else:
-                            y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)]
-
-                        ax[i_row, j_col].fill_between(t_hist, y_lwr, y_upr, step=fbstep,
-                                                      color=quantile_color, alpha=quantile_fill_alpha, zorder=qi)
-                        if quantile_legend:
-                            legend_handles.append(mpatches.Patch(color=quantile_color, alpha=quantile_alpha))
-                            if quantile_region == 'middle':
-                                legend_label_str = "Middle %5.1f%%" % (100*(1-((1-quantile)*2)))
-                            elif quantile_region == 'upper':
-                                legend_label_str = "Upper %5.1f%%" % (50*(1-((1-quantile)*2)))
-                            elif quantile_region == 'lower':
-                                legend_label_str = "Lower %5.1f%%" % (50*(1-((1-quantile)*2)))
-                            legend_labels.append(legend_label_str)
-
-                elif quantile_style == 'plot':
-                    if quantile_region == 'middle':
-                        cmap = get_cmap('coolwarm_r')
-                    else:
-                        cmap = get_cmap('viridis')
-                        # cmap = get_cmap('tab10')
-                    qtot = 0
-                    if not quantile_region == 'upper':
-                        qtot += len(quantiles)
-                    if not quantile_region == 'lower':
-                        qtot += len(quantiles)
-                    qtot -= 1
-                    if not quantile_region == 'lower':
-                        for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
-                            y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)]
-                            artist_upr, = plotfun(t_hist, y_upr, color=cmap(qi/qtot), alpha=0.9, zorder=qi)
-                            if quantile_legend:
-                                legend_handles.append(artist_upr)
-                                legend_label_str = "Percentile %5.1f%%" % (100*quantile)
-                                legend_labels.append(legend_label_str)
-                            qi += 1
-                    if not quantile_region == 'upper':
-                        for quantile, quantile_alpha in zip(reversed(quantiles), reversed(quantile_alphas)):
-                            y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)]
-                            artist_lwr, = plotfun(t_hist, y_lwr, color=cmap(qi/qtot), alpha=0.9, zorder=qi)
-                            if quantile_legend:
-                                legend_handles.append(artist_lwr)
-                                legend_label_str = "Percentile %5.1f%%" % (100*(1-quantile))
-                                legend_labels.append(legend_label_str)
-                            qi += 1
-
-            # Plot particular samples
-            if show_samples:
-                for sample_idx in sample_idx_list:
-                    sample_idx_modten = sample_idx % 10
-                    sample_str = 'sample_'+str(sample_idx)
-                    artist, = plotfun(t_hist, ydata_dict[control_scheme][field][sample_str],
-                                      color='darkgreen', alpha=0.9, lw=2, zorder=20+sample_idx_modten)
-                    if sample_legend:
-                        legend_handles.append(artist)
-                        legend_labels.append(sample_str)
-
-            # Plot guidelines
-            if show_guideline:
-                x_guide = np.copy(t_hist)
-                y_guide = np.zeros(ydata_dict[control_scheme][field]['ydata'].shape[1])
-                if j_col < 2:
-                    if plot_fields[i_row] == 'specrad_hist' or plot_fields[i_row] == 'gamma_reduction_hist':
-                        y_guide = np.ones(ydata_dict[control_scheme][field]['ydata'].shape[1])
-                plotfun(x_guide, y_guide, color='tab:grey', lw=1, linestyle='--', zorder=20)
-
-            # Set axes options
-            ax[i_row, j_col].set_xscale(xscale)
-            ax[i_row, j_col].set_yscale(yscale)
-            if j_col == 0:
-                ylabel_str = plot_fields[i_row].replace('_', ' ')
-                ax[i_row, j_col].set_ylabel(ylabel_str)
-
-            leg = ax[i_row, j_col].legend(handles=legend_handles, labels=legend_labels, loc='upper right')
-            leg.set_zorder(1000)
-
-            # Set axes limits
-            try:
-                if zoom:
-                    x_zoom_start_idx_portion = 0.1
-                    xlen = len(t_hist)
-                    x_zoom_start_idx = int(x_zoom_start_idx_portion*(xlen-x_start_idx))
-                    xl = [t_hist[x_zoom_start_idx], t_hist[-1]]
-                    ydata_for_lims = ydata_dict[control_scheme][field]['ydata'][x_zoom_start_idx:]
-                    ydata_for_lims = ydata_for_lims[np.isfinite(ydata_for_lims)]
-                    ylim_quantile = min([max(quantiles), 0.95])
-                else:
-                    xl = [t_hist[x_start_idx], t_hist[-1]]
-                    ydata_for_lims = ydata_dict[control_scheme][field]['ydata'][x_start_idx:]
-                    ydata_for_lims = ydata_for_lims[np.isfinite(ydata_for_lims)]
-                    ylim_quantile = max(quantiles)
-                yl_quantile_lwr = np.quantile(ydata_for_lims, 1-ylim_quantile)
-                yl_quantile_upr = np.quantile(ydata_for_lims, ylim_quantile)
-                if j_col == 2:
-                    # Make y-axis limits symmetric about zero
-                    ylqmax = np.max(np.abs([yl_quantile_lwr, yl_quantile_upr]))
-                    yl = [-ylqmax, ylqmax]
-                else:
-                    yl = [np.min(yl_quantile_lwr), np.max(yl_quantile_upr)]
-                ax[i_row, j_col].set_xlim(xl)
-                # ax[i_row, j_col].set_ylim(yl)
-            except:
-                pass
-
-            if grid:
-                ax[i_row, j_col].grid('on')
-            ax[i_row, j_col].set_axisbelow(True)
-            quantile_region = copy(quantile_region_restore)
-        xlabel_str = 'Time'
-        ax[-1, j_col].set_xlabel(xlabel_str)
-        title_str = control_scheme.replace('_', ' ').title()
-        ax[0, j_col].set_title(title_str)
-
-    if match_ylims:
-        for i_row in range(nrows):
-            yl_left = ax[i_row, 0].get_ylim()
-            yl_right = ax[i_row, 1].get_ylim()
-            yl_min = min(yl_left[0], yl_right[0])
-            yl_max = max(yl_left[1], yl_right[1])
-            ax[i_row, 0].set_ylim(yl_min, yl_max)
-            ax[i_row, 1].set_ylim(yl_min, yl_max)
-
-    if maximize_window:
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
-    fig.tight_layout()
-    return fig, ax
-
-
-def multi_plot(output_dict, cost_are_true, t_hist, t_start_estimate, legend=True):
-    plot_fields_all = [['regret_hist',
-                        'cost_future_hist',
-                        'specrad_hist'],
-                       ['Aerr_hist',
-                        'Berr_hist'],
-                       ['a_hist',
-                        'b_hist',
-                        'gamma_reduction_hist']]
-
-    plot_type = 'summary'
-    # plot_type = 'samples'
-
-
-    if plot_type == 'summary':
-        show_quantiles = True
-        show_mean = True
-        show_trimmed_mean = True
-        show_median = True
-        sample_idx_list = None
-    #
-    # elif plot_type == 'samples':
-    #     show_quantiles = True
-    #     show_mean = False
-    #     show_trimmed_mean = False
-    #     show_median = False
-    #     # Build sample idx list based on large excursions of the state
-    #     control_schemes = list(output_dict.keys())
-    #     Ns = output_dict[control_schemes[0]]['regret_hist'].shape[0]
-    #     threshold = 1000
-    #     idx_list = []
-    #     for i, control_scheme in enumerate(control_schemes):
-    #         idx_list = idx_list + np.where(np.any(np.abs(output_dict[control_scheme]['x_test_hist']) > threshold, axis=(1,2)))[0].tolist()
-    #     sample_idx_list = np.unique(idx_list)
-
-
-
-    figs = []
-    for plot_fields in plot_fields_all:
-        fig, ax = comparison_plot(output_dict, cost_are_true, t_hist, t_start_estimate, plot_fields,
-                                  show_quantiles=show_quantiles,
-                                  show_mean=show_mean,
-                                  show_trimmed_mean=show_trimmed_mean,
-                                  show_median=show_median,
-                                  sample_idx_list=sample_idx_list)
-        figs.append(fig)
-    plt.show()
-    return figs
+# def comparison_plot(output_dict, cost_are_true, t_hist, t_start_estimate, plot_fields,
+#                     plotfun_str='plot', xscale='linear', yscale='symlog',
+#                     show_mean=True, show_median=True, show_trimmed_mean=True, show_quantiles=True,
+#                     show_samples=True,
+#                     sample_idx_list=None, sample_legend=False,
+#                     trim_mean_quantile=None, quantiles=None, quantile_fill_alpha=0.2, quantile_color='tab:blue',
+#                     quantile_region='middle', quantile_style='fill', quantile_legend=False,
+#                     comparative=True, stat_diff_type='diff_of_stat',
+#                     grid=True, show_guideline=True, zoom=False, match_ylims=True,
+#                     maximize_window=False, figsize=(12, 10)):
+#     """
+#     Plot comparison of results using two different control schemes.
+#     :param output_dict: Dictionary of data history dictionaries associated with each control scheme
+#     :param cost_are_true: True optimal ARE cost
+#     :param t_hist: Time history, 1D numpy array
+#     :param t_start_estimate: The time when model estimates started being generated
+#     :param plot_fields: List of data fields to plot
+#     :param plotfun_str: What line plot style to use. Valid values are 'plot', 'step'
+#     :param xscale: String to pass to matplotlib.pyplot ax.yscale
+#     :param yscale: String to pass to matplotlib.pyplot ax.yscale
+#     :param show_mean: Boolean
+#     :param show_median: Boolean
+#     :param show_trimmed_mean: Boolean
+#     :param show_quantiles: Boolean
+#     :param trim_mean_quantile: Quantile to use in computing the trimmed mean, float
+#     :param quantiles: Quantile levels, list of floats between 0 and 1
+#     :param quantile_fill_alpha: Transparency of quantile fill regions, float
+#     :param quantile_color: Color of quantile fill regions or lines, string
+#     :param quantile_region: Set the quantile plot region. Valid values are 'upper', 'lower', 'middle'
+#     :param quantile_style: Set the quantile plot style. Valid values are 'fill' or 'plot'
+#     :param quantile_legend: Set whether to include quantiles in legend, boolean
+#     :param comparative: Set whether to show the difference between the first and second algorithm data, boolean
+#     :param stat_diff_type: Set the statistic difference calculation method.
+#                            Valid values are 'diff_of_stat', 'stat_of_diff'
+#     :param grid: Show the plot grid, boolean
+#     :param show_guideline: Show a guideline at 0 or 1 depending on plotted field, boolean
+#     :param zoom: Zoom the plot, useful for clipping large max/min, boolean
+#     :param match_ylims: Set whether to set y limits the same for both algorithms' plots, boolean
+#     :param maximize_window: Boolean
+#     :param figsize: Figure window size, passed to matplotlib.pyplot figure. Ex. 2-tuple (width, height) in inches
+#     """
+#
+#     # Number columns in the subplots
+#     if len(output_dict) == 1:
+#         ncols = 1
+#         if comparative:
+#             warn('Requested comparative plot with single data set, ignoring comparison.')
+#     elif len(output_dict) == 2 and not comparative:
+#         ncols = 2
+#     elif len(output_dict) == 2 and comparative:
+#         ncols = 3
+#
+#     # Number columns in the subplots
+#     nrows = len(plot_fields)
+#
+#     # Number of Monte Carlo samples
+#     control_schemes = list(output_dict.keys())
+#     Ns = output_dict[control_schemes[0]][plot_fields[0]].shape[0]
+#
+#     # Set sample indices
+#     if sample_idx_list is None:
+#         sample_idx_list = []
+#     elif sample_idx_list == 'all':
+#         sample_idx_list = [i for i in range(Ns)]
+#
+#     # Set quantile levels
+#     if quantiles is None:
+#         # quantiles = [1.00, 0.975, 0.875, 0.75, 0.625]
+#         quantiles = [1.00, 0.999, 0.99, 0.975, 0.875, 0.75]
+#         # quantiles = [1.00, 0.99, 0.95]
+#     quantiles = np.array(quantiles)
+#
+#     # Set quantile level for trimmed mean
+#     if trim_mean_quantile is None:
+#         trim_mean_quantile = np.max(quantiles[quantiles < 1])
+#
+#     # Manually compute alphas of overlapping regions for legend patches
+#     quantile_alphas = compute_transparencies(quantiles, quantile_fill_alpha)
+#
+#     # Process history data for plotting
+#     fields_to_normalize_by_cost_are_true = ['cost_future_hist']
+#     fields_to_mean = ['a_hist', 'b_hist']
+#     fields_to_absmax = []
+#     fields_to_vecnorm = ['x_train_hist', 'x_test_hist', 'u_train_hist', 'u_test_hist', 'x_opt_test_hist']
+#     fields_to_fronorm = ['K_hist']
+#     fields_to_truncate = ['x_train_hist', 'x_test_hist', 'x_opt_test_hist']
+#
+#     # Make the list of statistic names
+#     statistics = ['ydata', 'mean', 'trimmed_mean', 'median']
+#     for quantile in quantiles:
+#         statistics.append('quantile_'+str(quantile))
+#         statistics.append('quantile_'+str(1-quantile))
+#
+#     # Build the ydata dictionary from output_dict
+#     ydata_dict = {}
+#     for control_scheme in control_schemes:
+#         ydata_dict[control_scheme] = {}
+#         for field in plot_fields:
+#             ydata_dict[control_scheme][field] = {}
+#             # Preprocessing
+#             if field in fields_to_normalize_by_cost_are_true:
+#                 ydata = output_dict[control_scheme][field] / cost_are_true
+#             elif field in fields_to_mean:
+#                 ydata = np.mean(output_dict[control_scheme][field], axis=2)
+#             elif field in fields_to_absmax:
+#                 ydata = np.max(np.abs(output_dict[control_scheme][field]), axis=2)
+#             elif field in fields_to_vecnorm:
+#                 ydata = la.norm(output_dict[control_scheme][field], axis=2)
+#             elif field in fields_to_fronorm:
+#                 ydata = la.norm(output_dict[control_scheme][field], ord='fro', axis=(2, 3))
+#             else:
+#                 ydata = output_dict[control_scheme][field]
+#             if field in fields_to_truncate:
+#                 ydata = ydata[:, :-1]
+#             # Convert nan to inf
+#             ydata[np.isnan(ydata)] = np.inf
+#             # Convert inf to big number (needed for plotting so that inf values are not neglected)
+#             ydata[np.isinf(ydata)] = BIG
+#             # Store processed data
+#             ydata_dict[control_scheme][field]['ydata'] = ydata
+#             # Compute statistics
+#             ydata_dict[control_scheme][field]['mean'] = np.mean(ydata, axis=0)
+#             ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata, proportiontocut=1-trim_mean_quantile, axis=0)
+#             ydata_dict[control_scheme][field]['median'] = np.median(ydata, axis=0)
+#             for quantile in quantiles:
+#                 ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata, quantile, axis=0)
+#                 ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata, 1-quantile, axis=0)
+#             # Compute particular samples' data
+#             for sample_idx in sample_idx_list:
+#                 ydata_dict[control_scheme][field]['sample_'+str(sample_idx)] = ydata[sample_idx]
+#
+#     # Compute statistic differences
+#     if len(output_dict) == 2 and comparative:
+#         control_scheme = control_schemes[0] + ' minus ' + control_schemes[1]
+#         control_schemes.append(control_scheme)
+#         ydata_dict[control_scheme] = {}
+#         for field in plot_fields:
+#             ydata_dict[control_scheme][field] = {}
+#             for statistic in statistics:
+#                 # Choose whether to calculate statistics before or after taking the difference
+#                 if stat_diff_type == 'diff_of_stat':
+#                     stat1 = ydata_dict[control_schemes[0]][field][statistic]
+#                     stat2 = ydata_dict[control_schemes[1]][field][statistic]
+#                     ydata_dict[control_scheme][field][statistic] = stat1 - stat2
+#                 elif stat_diff_type == 'stat_of_diff':
+#                     #TODO: reuse statistic computation code above
+#                     ydata1 = ydata_dict[control_schemes[0]][field]['ydata']
+#                     ydata2 = ydata_dict[control_schemes[1]][field]['ydata']
+#                     ydata_diff = ydata1 - ydata2
+#                     ydata_dict[control_scheme][field]['ydata'] = ydata_diff
+#                     # Compute statistics
+#                     ydata_dict[control_scheme][field]['median'] = np.median(ydata_diff, axis=0)
+#                     ydata_dict[control_scheme][field]['mean'] = np.mean(ydata_diff, axis=0)
+#                     ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata_diff, proportiontocut=1-trim_mean_quantile, axis=0)
+#                     for quantile in quantiles:
+#                         ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata_diff, quantile, axis=0)
+#                         ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata_diff, 1-quantile, axis=0)
+#             # Compute particular samples' data
+#             for sample_idx in sample_idx_list:
+#                 ydata_dict[control_scheme][field]['sample_'+str(sample_idx)] = ydata_diff[sample_idx]
+#
+#     # Initialize figure and axes
+#     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, sharex=True, sharey='row')
+#
+#     # x start index
+#     x_start_idx = t_start_estimate
+#
+#     # Plot each data series
+#     for j_col, control_scheme in enumerate(control_schemes):
+#         for i_row, field in enumerate(plot_fields):
+#             quantile_region_restore = copy(quantile_region)
+#             # if j_col == 2:
+#             #     quantile_region = 'middle'
+#             # Choose the plotting function
+#             if plotfun_str == 'plot':
+#                 plotfun = ax[i_row, j_col].plot
+#                 fbstep = None
+#             elif plotfun_str == 'step':
+#                 plotfun = ax[i_row, j_col].step
+#                 fbstep = 'pre'
+#             legend_handles = []
+#             legend_labels = []
+#
+#             # Plot mean
+#             if show_mean:
+#                 artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['mean'], color='k', lw=2, zorder=120)
+#                 legend_handles.append(artist)
+#                 legend_labels.append("Mean")
+#
+#             # Plot trimmed mean
+#             if show_trimmed_mean:
+#                 artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['trimmed_mean'], color='tab:grey', lw=2, zorder=130)
+#                 legend_handles.append(artist)
+#                 legend_labels.append("Trimmed mean, middle %.0f%%" % (100*(1-((1-trim_mean_quantile)*2))))
+#
+#             # Plot median
+#             if show_median:
+#                 artist, = plotfun(t_hist, ydata_dict[control_scheme][field]['median'], color='b', lw=2, zorder=110)
+#                 legend_handles.append(artist)
+#                 legend_labels.append("Median")
+#
+#             if field == 'gamma_reduction_hist':
+#                 quantile_region = 'middle'
+#
+#             # Plot quantiles
+#             if j_col == 2 and stat_diff_type == 'diff_of_stat':
+#                 quantile_style = 'plot'
+#             if show_quantiles:
+#                 qi = 0
+#                 if quantile_style == 'fill':
+#                     for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
+#                         if quantile_region == 'upper':
+#                             y_lwr = ydata_dict[control_scheme][field]['median']
+#                         else:
+#                             y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)]
+#                         if quantile_region == 'lower':
+#                             y_upr = ydata_dict[control_scheme][field]['median']
+#                         else:
+#                             y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)]
+#
+#                         ax[i_row, j_col].fill_between(t_hist, y_lwr, y_upr, step=fbstep,
+#                                                       color=quantile_color, alpha=quantile_fill_alpha, zorder=qi)
+#                         if quantile_legend:
+#                             legend_handles.append(mpatches.Patch(color=quantile_color, alpha=quantile_alpha))
+#                             if quantile_region == 'middle':
+#                                 legend_label_str = "Middle %5.1f%%" % (100*(1-((1-quantile)*2)))
+#                             elif quantile_region == 'upper':
+#                                 legend_label_str = "Upper %5.1f%%" % (50*(1-((1-quantile)*2)))
+#                             elif quantile_region == 'lower':
+#                                 legend_label_str = "Lower %5.1f%%" % (50*(1-((1-quantile)*2)))
+#                             legend_labels.append(legend_label_str)
+#
+#                 elif quantile_style == 'plot':
+#                     if quantile_region == 'middle':
+#                         cmap = get_cmap('coolwarm_r')
+#                     else:
+#                         cmap = get_cmap('viridis')
+#                         # cmap = get_cmap('tab10')
+#                     qtot = 0
+#                     if not quantile_region == 'upper':
+#                         qtot += len(quantiles)
+#                     if not quantile_region == 'lower':
+#                         qtot += len(quantiles)
+#                     qtot -= 1
+#                     if not quantile_region == 'lower':
+#                         for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
+#                             y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)]
+#                             artist_upr, = plotfun(t_hist, y_upr, color=cmap(qi/qtot), alpha=0.9, zorder=qi)
+#                             if quantile_legend:
+#                                 legend_handles.append(artist_upr)
+#                                 legend_label_str = "Percentile %5.1f%%" % (100*quantile)
+#                                 legend_labels.append(legend_label_str)
+#                             qi += 1
+#                     if not quantile_region == 'upper':
+#                         for quantile, quantile_alpha in zip(reversed(quantiles), reversed(quantile_alphas)):
+#                             y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)]
+#                             artist_lwr, = plotfun(t_hist, y_lwr, color=cmap(qi/qtot), alpha=0.9, zorder=qi)
+#                             if quantile_legend:
+#                                 legend_handles.append(artist_lwr)
+#                                 legend_label_str = "Percentile %5.1f%%" % (100*(1-quantile))
+#                                 legend_labels.append(legend_label_str)
+#                             qi += 1
+#
+#             # Plot particular samples
+#             if show_samples:
+#                 for sample_idx in sample_idx_list:
+#                     sample_idx_modten = sample_idx % 10
+#                     sample_str = 'sample_'+str(sample_idx)
+#                     artist, = plotfun(t_hist, ydata_dict[control_scheme][field][sample_str],
+#                                       color='darkgreen', alpha=0.9, lw=2, zorder=20+sample_idx_modten)
+#                     if sample_legend:
+#                         legend_handles.append(artist)
+#                         legend_labels.append(sample_str)
+#
+#             # Plot guidelines
+#             if show_guideline:
+#                 x_guide = np.copy(t_hist)
+#                 y_guide = np.zeros(ydata_dict[control_scheme][field]['ydata'].shape[1])
+#                 if j_col < 2:
+#                     if plot_fields[i_row] == 'specrad_hist' or plot_fields[i_row] == 'gamma_reduction_hist':
+#                         y_guide = np.ones(ydata_dict[control_scheme][field]['ydata'].shape[1])
+#                 plotfun(x_guide, y_guide, color='tab:grey', lw=1, linestyle='--', zorder=20)
+#
+#             # Set axes options
+#             ax[i_row, j_col].set_xscale(xscale)
+#             ax[i_row, j_col].set_yscale(yscale)
+#             if j_col == 0:
+#                 ylabel_str = plot_fields[i_row].replace('_', ' ')
+#                 ax[i_row, j_col].set_ylabel(ylabel_str)
+#
+#             leg = ax[i_row, j_col].legend(handles=legend_handles, labels=legend_labels, loc='upper right')
+#             leg.set_zorder(1000)
+#
+#             # Set axes limits
+#             try:
+#                 if zoom:
+#                     x_zoom_start_idx_portion = 0.1
+#                     xlen = len(t_hist)
+#                     x_zoom_start_idx = int(x_zoom_start_idx_portion*(xlen-x_start_idx))
+#                     xl = [t_hist[x_zoom_start_idx], t_hist[-1]]
+#                     ydata_for_lims = ydata_dict[control_scheme][field]['ydata'][x_zoom_start_idx:]
+#                     ydata_for_lims = ydata_for_lims[np.isfinite(ydata_for_lims)]
+#                     ylim_quantile = min([max(quantiles), 0.95])
+#                 else:
+#                     xl = [t_hist[x_start_idx], t_hist[-1]]
+#                     ydata_for_lims = ydata_dict[control_scheme][field]['ydata'][x_start_idx:]
+#                     ydata_for_lims = ydata_for_lims[np.isfinite(ydata_for_lims)]
+#                     ylim_quantile = max(quantiles)
+#                 yl_quantile_lwr = np.quantile(ydata_for_lims, 1-ylim_quantile)
+#                 yl_quantile_upr = np.quantile(ydata_for_lims, ylim_quantile)
+#                 if j_col == 2:
+#                     # Make y-axis limits symmetric about zero
+#                     ylqmax = np.max(np.abs([yl_quantile_lwr, yl_quantile_upr]))
+#                     yl = [-ylqmax, ylqmax]
+#                 else:
+#                     yl = [np.min(yl_quantile_lwr), np.max(yl_quantile_upr)]
+#                 ax[i_row, j_col].set_xlim(xl)
+#                 # ax[i_row, j_col].set_ylim(yl)
+#             except:
+#                 pass
+#
+#             if grid:
+#                 ax[i_row, j_col].grid('on')
+#             ax[i_row, j_col].set_axisbelow(True)
+#             quantile_region = copy(quantile_region_restore)
+#         xlabel_str = 'Time'
+#         ax[-1, j_col].set_xlabel(xlabel_str)
+#         title_str = control_scheme.replace('_', ' ').title()
+#         ax[0, j_col].set_title(title_str)
+#
+#     if match_ylims:
+#         for i_row in range(nrows):
+#             yl_left = ax[i_row, 0].get_ylim()
+#             yl_right = ax[i_row, 1].get_ylim()
+#             yl_min = min(yl_left[0], yl_right[0])
+#             yl_max = max(yl_left[1], yl_right[1])
+#             ax[i_row, 0].set_ylim(yl_min, yl_max)
+#             ax[i_row, 1].set_ylim(yl_min, yl_max)
+#
+#     if maximize_window:
+#         figManager = plt.get_current_fig_manager()
+#         figManager.window.showMaximized()
+#     fig.tight_layout()
+#     return fig, ax
+#
+#
+# def multi_plot(output_dict, cost_are_true, t_hist, t_start_estimate, legend=True):
+#     plot_fields_all = [['regret_hist',
+#                         'cost_future_hist',
+#                         'specrad_hist'],
+#                        ['Aerr_hist',
+#                         'Berr_hist'],
+#                        ['a_hist',
+#                         'b_hist',
+#                         'gamma_reduction_hist']]
+#
+#     plot_type = 'summary'
+#     # plot_type = 'samples'
+#
+#
+#     if plot_type == 'summary':
+#         show_quantiles = True
+#         show_mean = True
+#         show_trimmed_mean = True
+#         show_median = True
+#         sample_idx_list = None
+#     #
+#     # elif plot_type == 'samples':
+#     #     show_quantiles = True
+#     #     show_mean = False
+#     #     show_trimmed_mean = False
+#     #     show_median = False
+#     #     # Build sample idx list based on large excursions of the state
+#     #     control_schemes = list(output_dict.keys())
+#     #     Ns = output_dict[control_schemes[0]]['regret_hist'].shape[0]
+#     #     threshold = 1000
+#     #     idx_list = []
+#     #     for i, control_scheme in enumerate(control_schemes):
+#     #         idx_list = idx_list + np.where(np.any(np.abs(output_dict[control_scheme]['x_test_hist']) > threshold, axis=(1,2)))[0].tolist()
+#     #     sample_idx_list = np.unique(idx_list)
+#
+#
+#
+#     figs = []
+#     for plot_fields in plot_fields_all:
+#         fig, ax = comparison_plot(output_dict, cost_are_true, t_hist, t_start_estimate, plot_fields,
+#                                   show_quantiles=show_quantiles,
+#                                   show_mean=show_mean,
+#                                   show_trimmed_mean=show_trimmed_mean,
+#                                   show_median=show_median,
+#                                   sample_idx_list=sample_idx_list)
+#         figs.append(fig)
+#     plt.show()
+#     return figs
 
 
 def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_evals,
+                     show_print=True, show_plot=True,
                      plotfun_str='plot', xscale='linear', yscale='symlog',
                      show_mean=True, show_median=True, show_trimmed_mean=False, show_quantiles=True,
                      trim_mean_quantile=None, quantile_fill_alpha=0.2, quantile_color='tab:blue',
                      quantile_region='upper', quantile_style='fill', quantile_legend=True,
                      stat_diff_type='diff_of_stat',
+                     show_xlabel=True, show_ylabel=True, show_title=True,
                      grid=True, show_guideline=True, zoom=False,
                      figsize=(4.5, 3), save_plots=False, dirname_out=None):
 
@@ -449,8 +456,10 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                    'specrad_hist',
                    'Aerr_hist',
                    'Berr_hist',
+                   'Cerr_hist',
                    'a_hist',
                    'b_hist',
+                   'c_hist',
                    'gamma_reduction_hist']
     plot_control_schemes = ['certainty_equivalent',
                             'robust',
@@ -462,17 +471,21 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                             'robust',
                             'robust',
                             'robust',
+                            'robust',
+                            'robust',
                             'robust']
-    ylabels = ['Inf.-horz. compute_performance.',
-               'Inf.-horz. compute_performance.',
-               'Inf.-horz. compute_performance. diff.',
+    ylabels = ['Inf.-horz. perf.',
+               'Inf.-horz. perf.',
+               'Inf.-horz. perf. diff.',
                'Spec. rad.',
                'Spec. rad.',
                'Spec. rad. diff.',
-               r'$\| \hat{A}-A \|$',
-               r'$\| \hat{B}-B \|$',
+               r'$\Vert \hat{A}-A \Vert$',
+               r'$\Vert \hat{B}-B \Vert$',
+               r'$\Vert \hat{C}-C \Vert$',
                r'$a$',
                r'$b$',
+               r'$c$',
                r'$c_\gamma$']
     filenames = ['cost_future_ce',
                  'cost_future_rmn',
@@ -482,8 +495,10 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                  'specrad_diff',
                  'Aerr',
                  'Berr',
-                 'alpha',
-                 'beta',
+                 'Cerr',
+                 'a',
+                 'b',
+                 'c',
                  'gamma_scale']
 
     quantiles = [1.00, 0.999, 0.99, 0.95, 0.75]
@@ -498,7 +513,7 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
     # Process history data for plotting
     fields_to_normalize_by_cost_are_true = ['cost_future_hist']
     fields_to_mean = []
-    fields_to_absmax = ['a_hist', 'b_hist']
+    fields_to_absmax = ['a_hist', 'b_hist', 'c_hist']
     fields_to_vecnorm = ['x_train_hist', 'x_test_hist', 'u_train_hist', 'u_test_hist', 'x_opt_test_hist']
     fields_to_fronorm = ['K_hist']
     fields_to_squeeze = []
@@ -526,15 +541,17 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
             elif field in fields_to_vecnorm:
                 ydata = la.norm(output_dict[control_scheme][field], axis=2)
             elif field in fields_to_fronorm:
-                ydata = la.norm(output_dict[control_scheme][field], ord='fro', axis=(2,3))
+                ydata = la.norm(output_dict[control_scheme][field], ord='fro', axis=(2, 3))
             else:
                 ydata = output_dict[control_scheme][field]
             if field in fields_to_squeeze:
                 ydata = np.squeeze(ydata)
             if field in fields_to_truncate:
-                ydata = ydata[:,:-1]
+                ydata = ydata[:, :-1]
             # Convert nan to inf
             ydata[np.isnan(ydata)] = np.inf
+            # Convert inf to big number (needed for plotting so that inf values are not neglected)
+            ydata[np.isinf(ydata)] = BIG
             # Store processed data
             ydata_dict[control_scheme][field]['ydata'] = ydata
             # Compute statistics
@@ -557,7 +574,7 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
             if stat_diff_type=='diff_of_stat':
                 stat1 = ydata_dict[control_schemes[0]][field][statistic]
                 stat2 = ydata_dict[control_schemes[1]][field][statistic]
-                ydata_dict[control_scheme][field][statistic] =  stat1 - stat2
+                ydata_dict[control_scheme][field][statistic] = stat1 - stat2
             elif stat_diff_type=='stat_of_diff':
                 #TODO: reuse statistic computation code above
                 ydata1 = ydata_dict[control_schemes[0]][field]['ydata']
@@ -578,30 +595,25 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
 
     for control_scheme, field, ylabel_str, filename in zip(plot_control_schemes, plot_fields, ylabels, filenames):
         try:
-            # Initialize figure and axes
-            fig, ax = plt.subplots(figsize=figsize)
+            if show_plot:
+                # Initialize figure and axes
+                fig, ax = plt.subplots(figsize=figsize)
 
-            # Choose the plotting function
-            if plotfun_str == 'plot':
-                plotfun = ax.plot
-                fbstep = None
-            elif plotfun_str == 'step':
-                plotfun = ax.step
-                fbstep = 'pre'
-
+                # Choose the plotting function
+                if plotfun_str == 'plot':
+                    plotfun = ax.plot
+                    fbstep = None
+                elif plotfun_str == 'step':
+                    plotfun = ax.step
+                    fbstep = 'pre'
 
             # Choose the quantiles
-            # if control_scheme == diff_scheme and stat_diff_type == 'diff_of_stat':
-            #     quantile_style = 'plot'
-            # else:
-            #     quantile_style = 'fill'
-
             if field == 'gamma_reduction_hist':
                 quantiles = [1.00, 0.95, 0.75]
-                quantile_region = 'middle'
+                quantile_regions = ['middle']
             else:
                 quantiles = [0.999, 0.99, 0.95]
-                quantile_region = 'upper'
+                quantile_regions = ['upper', 'lower']
             quantiles = np.array(quantiles)
 
             # xl = [t_hist[x_start_idx], t_hist[-1]*1.05]
@@ -611,161 +623,194 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
             legend_handles = []
             legend_labels = []
 
+            if show_print:
+                print(control_scheme)
+                print(field)
 
             t_idxs = []
             for t in t_evals:
                 t_idxs.append(np.where(t_hist == t)[0][0])
             xdata = t_hist[t_idxs]
 
+            if show_print:
+                print('Time')
+                print(xdata)
+
             # Plot mean
             if show_mean:
                 ydata = ydata_dict[control_scheme][field]['mean'][t_idxs]
-                artist, = plotfun(xdata, ydata, color='k', lw=2, zorder=120)
-                legend_handles.append(artist)
-                legend_labels.append("Mean")
+                if show_plot:
+                    artist, = plotfun(xdata, ydata, color='k', lw=2, zorder=120)
+                    legend_handles.append(artist)
+                    legend_labels.append("Mean")
+                if show_print:
+                    print('Mean')
+                    print(ydata)
 
             # Plot trimmed mean
             if show_trimmed_mean:
                 ydata = ydata_dict[control_scheme][field]['trimmed_mean'][t_idxs]
-                artist, = plotfun(xdata, ydata, color='tab:grey', lw=2, zorder=130)
-                legend_handles.append(artist)
-                legend_labels.append("Trimmed mean, middle %.0f%%" % (100*(1-((1-trim_mean_quantile)*2))))
+                if show_plot:
+                    artist, = plotfun(xdata, ydata, color='tab:grey', lw=2, zorder=130)
+                    legend_handles.append(artist)
+                    legend_labels.append("Trimmed mean, middle %.0f%%" % (100*(1-((1-trim_mean_quantile)*2))))
+                if show_print:
+                    print('Trimmed mean')
+                    print(ydata)
 
             # Plot median
             if show_median:
                 ydata = ydata_dict[control_scheme][field]['median'][t_idxs]
-                artist, = plotfun(xdata, ydata, color='b', lw=2, zorder=110)
-                legend_handles.append(artist)
-                legend_labels.append("Median")
+                if show_plot:
+                    artist, = plotfun(xdata, ydata, color='b', lw=2, zorder=110)
+                    legend_handles.append(artist)
+                    legend_labels.append("Median")
+                if show_print:
+                    print('Median')
+                    print(ydata)
 
             # Plot quantiles
             if show_quantiles:
-                qi = 0
-                if quantile_style == 'fill':
-                    for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
-                        if quantile_region == 'upper':
-                            y_lwr = ydata_dict[control_scheme][field]['median'][t_idxs]
-                        else:
-                            y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)][t_idxs]
-                        if quantile_region == 'lower':
-                            y_upr = ydata_dict[control_scheme][field]['median'][t_idxs]
-                        else:
-                            y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)][t_idxs]
+                if show_plot:
+                    def plot_quantiles(quantile_region, quantile_color):
+                        qi = 0
+                        my_quantiles = reversed(quantiles) if quantile_region == 'lower' else quantiles
+                        my_quantile_alphas = reversed(quantile_alphas) if quantile_region == 'lower' else quantile_alphas
+                        for quantile, quantile_alpha in zip(my_quantiles, my_quantile_alphas):
+                            if quantile_region == 'upper':
+                                y_lwr = ydata_dict[control_scheme][field]['median'][t_idxs]
+                            else:
+                                y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)][t_idxs]
+                            if quantile_region == 'lower':
+                                y_upr = ydata_dict[control_scheme][field]['median'][t_idxs]
+                            else:
+                                y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)][t_idxs]
 
-                        ax.fill_between(xdata, y_lwr, y_upr, step=fbstep,
-                                        color=quantile_color, alpha=quantile_fill_alpha, zorder=qi)
-                        if quantile_legend:
-                            legend_handles.append(mpatches.Patch(color=quantile_color, alpha=quantile_alpha))
-                            if quantile_region == 'middle':
-                                legend_label_str = "Middle %.1f%%" % (100*(1-((1-quantile)*2)))
-                            elif quantile_region == 'upper':
-                                legend_label_str = "Upper %.1f%%" % (50*(1-((1-quantile)*2)))
-                            elif quantile_region == 'lower':
-                                legend_label_str = "Lower %.1f%%" % (50*(1-((1-quantile)*2)))
-                            legend_labels.append(legend_label_str)
+                            ax.fill_between(xdata, y_lwr, y_upr, step=fbstep,
+                                            color=quantile_color, alpha=quantile_fill_alpha, zorder=qi)
+                            qi += 1
 
-                elif quantile_style == 'plot':
-                    if quantile_region == 'middle':
-                        cmap = get_cmap('coolwarm_r')
-                    else:
-                        cmap = get_cmap('viridis')
-                        # cmap = get_cmap('tab10')
-                    qtot = 0
-                    if not quantile_region == 'upper':
-                        qtot += len(quantiles)
-                    if not quantile_region == 'lower':
-                        qtot += len(quantiles)
-                    qtot -= 1
-                    qcolors = ['C1', 'C2', 'C4', 'C5']
-                    if not quantile_region == 'lower':
-                        for quantile, quantile_alpha in zip(quantiles, quantile_alphas):
-                            y_upr = ydata_dict[control_scheme][field]['quantile_'+str(quantile)][t_idxs]
-                            artist_upr, = plotfun(xdata, y_upr, color=qcolors[qi], alpha=0.9, zorder=qi)
                             if quantile_legend:
-                                legend_handles.append(artist_upr)
-                                legend_label_str = "Percentile %.1f%%" % (100*quantile)
+                                legend_handles.append(mpatches.Patch(color=quantile_color, alpha=quantile_alpha))
+                                if quantile_region == 'middle':
+                                    legend_label_str = "Middle %.1f%%" % (100*(1-((1-quantile)*2)))
+                                elif quantile_region == 'upper':
+                                    legend_label_str = "Upper %.1f%%" % (50*(1-((1-quantile)*2)))
+                                elif quantile_region == 'lower':
+                                    legend_label_str = "Lower %.1f%%" % (50*(1-((1-quantile)*2)))
                                 legend_labels.append(legend_label_str)
-                            qi += 1
-                    if not quantile_region == 'upper':
-                        for quantile, quantile_alpha in zip(reversed(quantiles), reversed(quantile_alphas)):
-                            y_lwr = ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)][t_idxs]
-                            artist_lwr, = plotfun(xdata, y_lwr, color=qcolors[qi], alpha=0.9, zorder=qi)
-                            if quantile_legend:
-                                legend_handles.append(artist_lwr)
-                                legend_label_str = "Percentile %.1f%%" % (100*(1-quantile))
-                                legend_labels.append(legend_label_str)
-                            qi += 1
+
+                    for quantile_region in quantile_regions:
+                        if quantile_region == 'upper' or quantile_region == 'middle':
+                            quantile_color = 'tab:blue'
+                        elif quantile_region == 'lower':
+                            quantile_color = 'tab:green'
+                        plot_quantiles(quantile_region, quantile_color)
+
+
+                # Print quantiles
+                if show_print:
+                    for quantile in quantiles:
+                        print('Quantile % .1f%%'%(100*(1 - quantile)))
+                        y_lwr = ydata_dict[control_scheme][field]['quantile_' + str(1 - quantile)][t_idxs]
+                        print(y_lwr)
+                    for quantile in reversed(quantiles):
+                        print('Quantile % .1f%%'%(100*quantile))
+                        y_upr = ydata_dict[control_scheme][field]['quantile_' + str(quantile)][t_idxs]
+                        print(y_upr)
 
             # ax.set_xlim(xl)
 
             # Plot guidelines
-            if show_guideline:
-                y_guide = np.zeros(ydata_dict[control_scheme][field]['ydata'].shape[1])[t_idxs]
-                if field == 'specrad_hist' or field == 'gamma_reduction_hist':
-                    y_guide = np.ones(ydata_dict[control_scheme][field]['ydata'].shape[1])[t_idxs]
-                plotfun(xdata, y_guide, color='tab:grey', lw=1, linestyle='--', zorder=20)
+            if show_plot:
+                if show_guideline:
+                    y_guide = np.zeros(ydata_dict[control_scheme][field]['ydata'].shape[1])[t_idxs]
+                    if field == 'specrad_hist' or field == 'gamma_reduction_hist' or field == 'cost_future_hist':
+                        y_guide = np.ones(ydata_dict[control_scheme][field]['ydata'].shape[1])[t_idxs]
+                    plotfun(xdata, y_guide, color='tab:grey', lw=1, linestyle='--', zorder=20)
 
-            yscale = 'symlog'
-            if field == 'gamma_reduction_hist':
-                yscale = 'linear'
-            elif field == 'a_hist' or field == 'b_hist' or field == 'Aerr_hist' or field == 'Berr_hist':
-                yscale = 'log'
+                yscale = 'symlog'
+                if field == 'gamma_reduction_hist':
+                    yscale = 'linear'
+                elif field in ['a_hist', 'b_hist', 'c_hist', 'Aerr_hist', 'Berr_hist', 'Cerr_hist']:
+                    yscale = 'log'
 
-            # Set axes options
-            ax.set_xscale(xscale)
-            ax.set_yscale(yscale)
+                # Set axes options
+                ax.set_xscale(xscale)
+                ax.set_yscale(yscale)
 
-            loc = 'best'
-            if field == 'regret_hist':
-                loc = 'center right'
-            elif field == 'gamma_reduction_hist':
-                loc = 'lower right'
+                loc = 'best'
+                if field == 'regret_hist':
+                    loc = 'center right'
+                elif field == 'gamma_reduction_hist':
+                    loc = 'lower right'
 
-            leg = ax.legend(handles=legend_handles, labels=legend_labels, loc=loc)
-            leg.set_zorder(1000)
+                leg = ax.legend(handles=legend_handles, labels=legend_labels, loc=loc)
+                leg.set_zorder(1000)
 
-            # if field == 'regret_hist' and not control_scheme == diff_scheme:
-            #     yl = [-0.1, 1e27]
-            # else:
-            #     ydata_lim_lwr = ydata_dict[control_scheme][field]['median'][x_start_idx:]
-            #     ydata_lim_upr = ydata_dict[control_scheme][field]['quantile_'+str(max(quantiles))][x_start_idx:]
-            #     ydata_lim_lwr = ydata_lim_lwr[np.isfinite(ydata_lim_lwr)]
-            #     ydata_lim_upr = ydata_lim_upr[np.isfinite(ydata_lim_upr)]
-            #     yl_lwr = np.min(ydata_lim_lwr)
-            #     yl_upr = np.max(ydata_lim_upr)
-            #     yl = [yl_lwr, yl_upr]
-            # ax.set_ylim(yl)
+                # if field == 'regret_hist' and not control_scheme == diff_scheme:
+                #     yl = [-0.1, 1e27]
+                # else:
+                #     ydata_lim_lwr = ydata_dict[control_scheme][field]['median'][x_start_idx:]
+                #     ydata_lim_upr = ydata_dict[control_scheme][field]['quantile_'+str(max(quantiles))][x_start_idx:]
+                #     ydata_lim_lwr = ydata_lim_lwr[np.isfinite(ydata_lim_lwr)]
+                #     ydata_lim_upr = ydata_lim_upr[np.isfinite(ydata_lim_upr)]
+                #     yl_lwr = np.min(ydata_lim_lwr)
+                #     yl_upr = np.max(ydata_lim_upr)
+                #     yl = [yl_lwr, yl_upr]
+                # ax.set_ylim(yl)
 
-            # Hardcode y ticks
-            if field == 'regret_hist':
-                # plt.locator_params(axis='y', numticks=6)
-                plt.yticks([0, 1e10, 1e20, 1e30, 1e40, 1e50, 1e60, 1e70, 1e80])
-                # pass
-            elif field == 'a_hist' or field == 'b_hist':
-                # plt.yticks([0, 0.5, 1, 1.5, 2])
-                pass
-            elif field == 'gamma_reduction_hist':
-                plt.yticks([0, 0.25, 0.5, 0.75, 1])
+                if field == 'cost_future_hist':
+                    yl = [1.0, 2.0]
+                    ax.set_ylim(yl)
 
+                # Hardcode y ticks
+                if field == 'regret_hist':
+                    # plt.locator_params(axis='y', numticks=6)
+                    plt.yticks([0, 1e10, 1e20, 1e30, 1e40, 1e50, 1e60, 1e70, 1e80])
+                    # pass
+                elif field == 'cost_future_hist':
+                    plt.yticks([1.0, 1.5, 2.0])
+                    # pass
+                elif field == 'specrad_hist':
+                    plt.yticks([0.0, 0.5, 1.0, 1.5])
+                    # pass
+                elif field in ['a_hist', 'b_hist', 'c_hist']:
+                    # plt.yticks([0, 0.5, 1, 1.5, 2])
+                    pass
+                elif field == 'gamma_reduction_hist':
+                    plt.yticks([0, 0.25, 0.5, 0.75, 1])
 
-            if grid:
-                ax.grid('on')
-            ax.set_axisbelow(True)
-            xlabel_str = 'Time'
-            ax.set_xlabel(xlabel_str, fontsize=12)
-            # rot = None
-            # ax.set_ylabel(ylabel_str, fontsize=12, rotation=rot)
-            ax.set_ylabel(ylabel_str, fontsize=12)
-            title_str = ylabel_str+'_'+control_scheme
-            title_str = title_str.replace('_', ' ').title()
-            # ax.set_title(title_str)
+                # Plot options
+                if grid:
+                    ax.grid('on')
 
-            fig.tight_layout()
+                ax.set_axisbelow(True)
 
-            if save_plots:
-               filename_out = 'plot_' + filename + '.png'
-               path_out = os.path.join(dirname_out, filename_out)
-               plt.savefig(path_out, dpi=600, bbox_inches="tight")
+                if show_xlabel:
+                    xlabel_str = 'Time'
+                    ax.set_xlabel(xlabel_str, fontsize=12)
+                if show_ylabel:
+                    # rot = None
+                    # ax.set_ylabel(ylabel_str, fontsize=12, rotation=rot)
+                    ax.set_ylabel(ylabel_str, fontsize=12)
+
+                if show_title:
+                    # title_str = ylabel_str + '_' + control_scheme
+                    title_str = control_scheme
+                    title_str = title_str.replace('_', ' ').title()
+                    ax.set_title(title_str)
+
+                fig.tight_layout()
+
+                if save_plots:
+                   filename_out = 'plot_' + filename + '.png'
+                   path_out = os.path.join(dirname_out, filename_out)
+                   plt.savefig(path_out, dpi=600, bbox_inches="tight")
+
+            if show_print:
+                print()
+
         except:
             pass
 

@@ -54,8 +54,9 @@ def make_system_data(n=4, m=3, p=2, r=0.99, s=1.0):
     # Noise variances
     W = 0.1*np.eye(n)  # process noise
     V = 0.1*np.eye(p)  # sensor noise
+    U = np.zeros([n, p])  # process-sensor cross-covariance
 
-    sysdata = dict(A=A, B=B, C=C, a=a, Aa=Aa, b=b, Bb=Bb, c=c, Cc=Cc, Q=Q, R=R, W=W, V=V, n=n, m=m, p=p)
+    sysdata = dict(A=A, B=B, C=C, a=a, Aa=Aa, b=b, Bb=Bb, c=c, Cc=Cc, Q=Q, R=R, W=W, V=V, U=U, n=n, m=m, p=p)
     return sysdata
 
 
@@ -83,29 +84,32 @@ def example_sysdata(beta=0.1):
     R = 0.6644*np.eye(m)
     W = np.diag([0.5627, 0.7357])
     V = 0.2588*np.eye(p)
+    U = np.zeros([n, p])
 
-    sysdata = dict(A=A, B=B, C=C, a=a, Aa=Aa, b=b, Bb=Bb, c=c, Cc=Cc, Q=Q, R=R, W=W, V=V, n=n, m=m, p=p)
+    sysdata = dict(A=A, B=B, C=C, a=a, Aa=Aa, b=b, Bb=Bb, c=c, Cc=Cc, Q=Q, R=R, W=W, V=V, U=U, n=n, m=m, p=p)
     return sysdata
 
 
 def unpack(sysdata):
-    return [np.asarray(sysdata[key]) for key in ['A', 'B', 'C', 'a', 'Aa', 'b', 'Bb', 'c', 'Cc', 'Q', 'R', 'W', 'V', 'n', 'm', 'p']]
+    return [np.asarray(sysdata[key]) for key in ['A', 'B', 'C', 'a', 'Aa', 'b', 'Bb', 'c', 'Cc',
+                                                 'Q', 'R', 'W', 'V', 'U', 'n', 'm', 'p']]
 
 
 def qfun(X, sysdata):
-    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, n, m, p = unpack(sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
     X1, X2, X3, X4 = [X[i] for i in range(4)]
 
     # Control Q-function (G)
     Gxu = np.dot(A.T, np.dot(X1, B))
-    Gux = np.dot(B.T, np.dot(X1, A))
+    Gux = Gxu.T  # = np.dot(B.T, np.dot(X1, A))
     Guu = R + np.dot(B.T, np.dot(X1, B)) \
           + np.einsum('x,xji,jk,xkl->il', b, Bb, X1, Bb) \
           + np.einsum('x,xji,jk,xkl->il', b, Bb, X2, Bb)
 
     # Estimator Q-function (H)
-    Hxy = np.dot(A, np.dot(X3, C.T))
-    Hyx = np.dot(C, np.dot(X3, A.T))
+    # Hxy = np.dot(A, np.dot(X3, C.T))  # known correct if U == 0
+    Hxy = U + np.dot(A, np.dot(X3, C.T))  # use for U != 0
+    Hyx = Hxy.T  # = np.dot(C, np.dot(X3, A.T))
     Hyy = V + np.dot(C, np.dot(X3, C.T)) \
           + np.einsum('x,xij,jk,xlk->il', c, Cc, X3, Cc) \
           + np.einsum('x,xij,jk,xlk->il', c, Cc, X4, Cc)
@@ -147,6 +151,7 @@ def gain(X, sysdata, return_qfun=False):
     # Compute gains
     K = -la.solve(Guu, Gux)  # Control gain  u = K*x
     L = la.solve(Hyy, Hyx).T  # Estimator gain  xhat = A*x + B*u + L*(y - C*xhat)
+
     if return_qfun:
         return K, L, G, H
     else:
@@ -156,7 +161,7 @@ def gain(X, sysdata, return_qfun=False):
 def ricc(X, sysdata):
     # Riccati operator for multiplicative noise LQG
     # See W.L. de Koning, TAC 1992  https://ieeexplore.ieee.org/document/135491
-    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, n, m, p = unpack(sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
 
     # Get gain and Q function
     K, L, G, H = gain(X, sysdata, return_qfun=True)
@@ -207,7 +212,7 @@ def gdlyap(sysdata, K, L, primal=True, solver='direct', check_stable=True, P0=No
     """
 
     # Extract problem data
-    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, n, m, p = unpack(sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
 
     # Intermediate quantities
     BK = np.dot(B, K)
@@ -265,8 +270,10 @@ def gdlyap(sysdata, K, L, primal=True, solver='direct', check_stable=True, P0=No
                                   [np.dot(L, Cc[i]), zF]])
                 PhiPhi += c[i]*np.kron(PhiCc, PhiCc)
             # Build the penalty matrix
-            Wprime = np.block([[W, np.zeros([n, n])],
-                               [np.zeros([n, n]), np.dot(L, np.dot(V, L.T))]])
+            # Wprime = np.block([[W, np.zeros([n, n])],
+            #                    [np.zeros([n, n]), np.dot(L, np.dot(V, L.T))]])  # known correct if U == 0
+            Wprime = np.block([[W, np.dot(U, L.T)],
+                               [np.dot(L, U.T), np.dot(L, np.dot(V, L.T))]])  # use if U != 0
             vWprime = vec(Wprime)
             # Solve
             if check_stable:
@@ -349,7 +356,8 @@ def gdlyap(sysdata, K, L, primal=True, solver='direct', check_stable=True, P0=No
                 X22_4 = np.dot(F, np.dot(S22, F.T))
 
                 X11 = W + X11_1 + X11_2 + X11_3 + X11_4
-                X12 = X12_1 + X12_2 + X12_3 + X12_4
+                # X12 = X12_1 + X12_2 + X12_3 + X12_4  # known correct if U == 0
+                X12 = np.dot(U, L.T) + X12_1 + X12_2 + X12_3 + X12_4  # use if U != 0
                 X21 = X12.T
                 X22 = np.dot(L, np.dot(V, L.T)) + X22_1 + X22_2 + X22_3 + X22_4
 
@@ -381,18 +389,22 @@ def value(K, L, sysdata, *args, **kwargs):
 
 def cost(K, L, sysdata, primal=True):
     X = value(K, L, sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
 
-    # Performance criterion c computed using primal True and False are equal if everything works properly
+    # Performance criterion perf_crit computed using primal True and False are equal if everything works properly
     if primal:
-        c = np.trace(np.dot(Q, X[2]) + np.dot(Q + np.dot(K.T, np.dot(R, K)), X[3]))
+        term_xx = np.dot(Q, X[2])
+        term_uu = np.dot(Q + np.dot(K.T, np.dot(R, K)), X[3])
+        perf_crit = np.trace(term_xx + term_uu)
     else:
-        c = np.trace(np.dot(W, X[0]) + np.dot(W + np.dot(L, np.dot(V, L.T)), X[1]))
-
-    return c
+        term_xx = np.dot(W, X[0])
+        term_yy = np.dot(W + np.dot(L, np.dot(V, L.T)), X[1])
+        perf_crit = np.trace(term_xx + term_yy)
+    return perf_crit
 
 
 def get_initial_gains(sysdata, method='perturb_are', cost_factor=10.0, scale_factor=1.01):
-    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, n, m, p = unpack(sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
 
     if method == 'perturb_are':
         # Get initial gains by perturbing the Riccati solution found by value iteration
@@ -510,7 +522,7 @@ if __name__ == "__main__":
     npr.seed(seed)
     sysdata = example_sysdata(beta=0.2)
 
-    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, n, m, p = unpack(sysdata)
+    A, B, C, a, Aa, b, Bb, c, Cc, Q, R, W, V, U, n, m, p = unpack(sysdata)
 
     # Initialize value matrix
     # X0 = np.zeros((4, n, n))

@@ -100,7 +100,7 @@ def gen_pendulum_system(inverted, mass=10, damp=2, dt=0.1, Y=None, R=None, W=Non
     return n, m, p, A, B, C, D, Y, Q, R, W, V, U
 
 
-def gen_example_system(idx):
+def gen_example_system(idx, noise_scale=1.0):
     """
     Example systems
     :param idx: Selection integer to pick the example system.
@@ -130,6 +130,10 @@ def gen_example_system(idx):
     else:
         raise Exception('Invalid system index chosen, please choose a different one')
 
+    W *= noise_scale
+    V *= noise_scale
+    U *= noise_scale
+
     return n, m, p, A, B, C, D, Y, Q, R, W, V, U
 
 
@@ -146,7 +150,7 @@ def gen_system_omni(system_idx, **kwargs):
     elif system_idx == 'rand':
         return gen_rand_system(**kwargs)
     else:
-        return gen_example_system(idx=system_idx)
+        return gen_example_system(idx=system_idx, **kwargs)
 
 
 def save_system(n, m, p, A, B, C, D, Y, Q, R, W, V, U, dirname_out, filename_out):

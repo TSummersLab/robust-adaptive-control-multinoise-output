@@ -138,8 +138,8 @@ def comparison_closed_loop_plot(result_dict, t_sim=None, disturb_method='zeros',
         t_sim = T
 
     # Make disturbance histories
-    w_play_hist = make_sig(t_sim, n, [SigParam(method=disturb_method, mean=0, scale=disturb_scale, ma_length=None)])
-    v_play_hist = make_sig(t_sim, p, [SigParam(method=disturb_method, mean=0, scale=disturb_scale, ma_length=None)])
+    w_play_hist = make_sig(t_sim, n, [SigParam(method=disturb_method, mean=0, scale=disturb_scale)])
+    v_play_hist = make_sig(t_sim, p, [SigParam(method=disturb_method, mean=0, scale=disturb_scale)])
 
     fig, axs = plt.subplots(ncols=p, sharex=True, figsize=(8, 6))
     if p == 1:
@@ -222,26 +222,28 @@ if __name__ == "__main__":
     Nb = 100
 
     # Simulation time
-    t = 1000  # This is the amount of data that will be used by sysid
+    t = 20  # This is the amount of data that will be used by sysid
     T = t + 1  # This is the amount of data that will be simulated
 
-    # u_explore_var = np.max(la.eig(W)[0])
-    u_explore_var = 1.0
 
-    noise_pre_scale = 1.0
-    noise_post_scale = 1.0
-    bisection_epsilon = 0.01
 
 
     # Problem data
     # system_kwargs = dict(n=4, m=2, p=2, spectral_radius=0.9, noise_scale=0.1, seed=1)
     # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('rand', **system_kwargs)
 
-    # TODO figure out why using t = 100 results in estimated B = zeros
     n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=1)
-
-
     ss_true = make_ss(A, B, C, D, W, V, U)
+
+
+    # Exploration control signal
+    u_explore_var = 10*(np.max(la.eig(W)[0]) + np.max(la.eig(V)[0]))
+    # u_explore_var = 10.0
+
+    noise_pre_scale = 1.0
+    noise_post_scale = 1.0
+    bisection_epsilon = 0.01
+
 
     # Check controllability and observability of the true system
     check_tags = []
@@ -265,6 +267,11 @@ if __name__ == "__main__":
     w_hist = w_hist[0]
     v_hist = v_hist[0]
 
+    t_train_hist = np.arange(T)
+    fig, ax = plt.subplots(nrows=2)
+    ax[0].step(t_train_hist, u_train_hist)
+    ax[1].step(t_train_hist, y_train_hist)
+
     # Estimate the system model and residuals
     model, res = system_identification(y_train_hist[0:t], u_train_hist[0:t], id_method='N4SID',
                                        SS_fixed_order=n, return_residuals=True)
@@ -276,7 +283,6 @@ if __name__ == "__main__":
     Chat = model.C
     Dhat = model.D
 
-    # TODO make sure the scaling is right for these since docs say they are with respect to outputs with unit variance
     What = model.Q
     Vhat = model.R
     Uhat = model.S
@@ -286,9 +292,9 @@ if __name__ == "__main__":
 
 
     ####################################################################################################################
-    # # TODO change basis for A, B, C of true system by putting it into e.g. modal form
-    # #   That way, the estimated parameters will approach the true parameters after using the same standardizing transform
-    # #   needs more investigation, control.canonical_form with form='modal' does not make them match at all
+    # # change basis for A, B, C of true system by putting it into e.g. modal form
+    # # That way, the estimated parameters will approach the true parameters after using the same standardizing transform
+    # # needs more investigation, control.canonical_form with form='modal' does not make them match at all
     # ss_true_modal, true_modal_transform = control.canonical_form(ss_true, form='modal')
     # ss_model_modal, model_modal_transform = control.canonical_form(ss_model, form='modal')
 

@@ -6,12 +6,14 @@ Robust adaptive control via multiplicative noise from bootstrapped uncertainty e
 import os
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from utility.pickle_io import pickle_import
 
 from rocoboom_out.common.config import EXPERIMENT_FOLDER
 from rocoboom_out.common.problem_data_gen import load_system
-from rocoboom_out.common.plotting import multi_plot, multi_plot_paper
+from rocoboom_out.common.plotting import multi_plot_paper
+# from rocoboom_out.common.plotting import multi_plot
 
 
 def load_results(dirname_in):
@@ -69,14 +71,12 @@ def get_last_dir(parent_folder):
 if __name__ == "__main__":
     experiment_folder = EXPERIMENT_FOLDER
     experiment = 'last'
+    # experiment = '1630105372p8870902_Ns_1000_T_801_system_1_seed_1'
 
     if experiment == 'last':
         experiment = get_last_dir(experiment_folder)
 
     dirname_in = os.path.join(experiment_folder, experiment)
-
-    # training_type = 'offline'
-    # testing_type = 'online'
 
     # Load the problem data into the main workspace (not needed for plotting)
     (Ns, Nb, T, system_idx, seed,
@@ -86,12 +86,17 @@ if __name__ == "__main__":
     # Load results
     output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = load_results(dirname_in)
 
-    # # Print the log data, if it exists
-    # try:
-    #     for log_str in output_dict['robust']['log_str']:
-    #         print(log_str)
-    # except:
-    #     pass
+    # Print the log data, if it exists
+    show_diagnostics = False
+    if show_diagnostics:
+        try:
+            for log_str in output_dict['robust']['log_str']:
+                print(log_str)
+        except:
+            pass
 
     # Plotting
-    multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_evals, save_plots=True, dirname_out=dirname_in)
+    plt.close('all')
+    multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_evals,
+                     plotfun_str='step', show_print=True, show_plot=True,
+                     save_plots=False, dirname_out=dirname_in)

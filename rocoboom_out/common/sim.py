@@ -16,7 +16,9 @@ def make_exploration(m, Ns, T, u_explore_var):
     """
     scale = np.sqrt(u_explore_var)
     # u_hist = scale*npr.randn(Ns, T, m)
-    params = [SigParam(method='gbn', mean=0.0, scale=scale, ma_length=None)]
+    # params = [SigParam(method='gbn', mean=0.0, scale=scale)]
+    params = [SigParam(method='gbn', mean=0.0, scale=scale),
+              SigParam(method='wgn', mean=0.0, scale=scale)]
     u_hist = np.array([make_sig(T, m, params) for i in range(Ns)])
     return u_hist
 
@@ -130,7 +132,6 @@ def lsim_cl(ss, compensator, x0, w_hist, v_hist, T):
 
     # xhat_hist[0] = x0  # THIS IS BAD, DO NOT DO THIS! Only valid if compensator is in the same state coordinate system as the true system, which is generally not true!
     xhat_hist[0] = np.zeros_like(x0)
-
 
     for t in range(T):
         x = x_hist[t]

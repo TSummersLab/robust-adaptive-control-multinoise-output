@@ -10,21 +10,23 @@ import multiprocessing as mp
 import numpy as np
 import numpy.linalg as la
 import numpy.random as npr
+import matplotlib.pyplot as plt
 
 from utility.matrixmath import mdot, specrad, minsv, lstsqb, dlyap, dare, dare_gain
-
 from utility.pickle_io import pickle_export
 from utility.path_utility import create_directory
 from utility.user_input import yes_or_no
 from utility.printing import printcolors, create_tag
 
 from rocoboom_out.common.problem_data_gen import gen_system_omni, save_system
-from rocoboom_out.common.ss_tools import make_ss
+from rocoboom_out.common.ss_tools import make_ss, ss_change_coordinates
 from rocoboom_out.common.sim import make_offline_data
 from rocoboom_out.common.sysid import system_identification
 from rocoboom_out.common.uncertainty import estimate_model_uncertainty
 from rocoboom_out.common.compensator_design import make_compensator, sysmat_cl
 from rocoboom_out.common.compensator_eval import compute_performance
+from rocoboom_out.common.plotting import multi_plot_paper
+# from rocoboom_out.common.plotting import multi_plot
 
 
 def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
@@ -66,6 +68,8 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     noise_pre_scale = required_args['noise_pre_scale']
     noise_post_scale = required_args['noise_post_scale']
 
+    ss_true = make_ss(A, B, C, D, W, V, U)
+
     if control_scheme == 'certainty_equivalent':
         noise_post_scale = 0
 
@@ -80,6 +84,7 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     y_opt_test_hist = np.zeros([T, p])
 
     # Gain
+    F_hist = np.zeros([T, n, n])
     K_hist = np.zeros([T, m, n])
     L_hist = np.zeros([T, n, p])
 
@@ -87,6 +92,10 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     Ahat_hist = np.full([T, n, n], np.inf)
     Bhat_hist = np.full([T, n, m], np.inf)
     Chat_hist = np.full([T, p, n], np.inf)
+
+    What_hist = np.full([T, n, n], np.inf)
+    Vhat_hist = np.full([T, p, p], np.inf)
+    Uhat_hist = np.full([T, n, p], np.inf)
 
     # Model uncertainty
     a_hist = np.full([T, n*n], np.inf)
@@ -120,6 +129,7 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
 
         # Only use the training data we have observed up until now (do not cheat by looking ahead into the full history)
 
+        # Only perform computations at the times of interest t_evals
         if not t in t_evals:
             cost_future_hist[t] = -1
             continue
@@ -140,14 +150,27 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             w_est = res[0:n].T
             v_est = res[n:].T
 
-            Ahat = model.A
-            Bhat = model.B
-            Chat = model.C
+            # Trasform model to resemble true system coordinates, for evaluation only, not used by algo
+            ss_model_trans, P = ss_change_coordinates(ss_true, model, method='match')
 
             # Record model estimates and errors
+            Ahat = ss_model_trans.A
+            Bhat = ss_model_trans.B
+            Chat = ss_model_trans.C
+            What = ss_model_trans.Q
+            Vhat = ss_model_trans.R
+            Uhat = ss_model_trans.S
+
             Ahat_hist[t] = Ahat
             Bhat_hist[t] = Bhat
             Chat_hist[t] = Chat
+            What_hist[t] = What
+            Vhat_hist[t] = Vhat
+            Uhat_hist[t] = Uhat
+
+            Aerr_hist[t] = la.norm(Ahat - A, ord='fro')
+            Berr_hist[t] = la.norm(Bhat - B, ord='fro')
+            Cerr_hist[t] = la.norm(Chat - C, ord='fro')
 
             # Estimate model uncertainty
             if control_scheme == 'robust':
@@ -164,17 +187,6 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
                 Cchist[t] = uncertainty.Cc
             else:
                 uncertainty = None
-
-
-
-            # # TODO do the same thing with the C matrix, observable
-            # # Check if estimated system is controllable within a tolerance
-            # # If not, perturb the estimated B matrix until it is
-            # ctrb_tol = 1e-4
-            # while minsv(ctrb(Ahat, Bhat)) < ctrb_tol:
-            #     if log_diagnostics:
-            #         tag_list.append(create_tag('Estimated system uncontrollable, adjusted Bhat'))
-            #     Bhat += 0.00001*npr.randn(n, m)
 
             compensator, gamma_reduction, tag_list_cg = make_compensator(model, uncertainty, Y, R,
                                                                              noise_pre_scale, noise_post_scale,
@@ -214,7 +226,7 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
                     stable_str = printcolors.Green + 'Stable' + printcolors.Default
 
             # Record compensator
-            # TODO Ahat, Bhat, Chat, What, Vhat, maybe F
+            F_hist[t] = F
             K_hist[t] = K
             L_hist[t] = L
 
@@ -276,6 +288,9 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             'Ahat_hist': Ahat_hist,
             'Bhat_hist': Bhat_hist,
             'Chat_hist': Chat_hist,
+            'What_hist': What_hist,
+            'Vhat_hist': Vhat_hist,
+            'Uhat_hist': Uhat_hist,
             'Aerr_hist': Aerr_hist,
             'Berr_hist': Berr_hist,
             'Cerr_hist': Cerr_hist,
@@ -295,6 +310,7 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             'x_opt_test_hist': x_opt_test_hist,
             'u_opt_test_hist': u_opt_test_hist,
             'y_opt_test_hist': y_opt_test_hist,
+            'F_hist': F_hist,
             'K_hist': K_hist,
             'L_hist': L_hist,
             'monte_carlo_idx': np.array(monte_carlo_idx),
@@ -328,11 +344,15 @@ def monte_carlo_group(control_scheme, uncertainty_estimator, required_args,
                   'u_opt_test_hist': [T, m],
                   'y_test_hist': [T, p],
                   'y_opt_test_hist': [T, p],
+                  'F_hist': [T, n, n],
                   'K_hist': [T, m, n],
                   'L_hist': [T, n, p],
                   'Ahat_hist': [T, n, n],
                   'Bhat_hist': [T, n, m],
                   'Chat_hist': [T, p, n],
+                  'What_hist': [T, n, n],
+                  'Vhat_hist': [T, p, p],
+                  'Uhat_hist': [T, n, p],
                   'a_hist': [T, n*n],
                   'b_hist': [T, n*m],
                   'c_hist': [T, p*n],
@@ -368,7 +388,7 @@ def monte_carlo_group(control_scheme, uncertainty_estimator, required_args,
 
     if parallel_option == 'parallel':
         # Start the parallel process pool
-        num_cpus_to_use = mp.cpu_count() - 1
+        num_cpus_to_use = mp.cpu_count() - 1  # leave 1 cpu open for other tasks, ymmv
         pool = mp.Pool(num_cpus_to_use)
 
     for k in range(Ns):
@@ -490,10 +510,7 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
     # Time to begin forming model estimates
     t_start_estimate_lwr = int(n*(n+m+p)/p)
 
-    # t_start_estimate = 2*t_start_estimate_lwr
-    # TODO use the auto value instead of this hardcode value
-    # TODO Figure out why SIPPY fails with t_start_estimate = 2*t_start_estimate_lwr - maybe the horizon length SS_f in system_identification?
-    t_start_estimate = 100
+    t_start_estimate = 2*t_start_estimate_lwr
 
     if t_start_estimate < t_start_estimate_lwr:
         response = yes_or_no("t_start_estimate chosen < int(n*(n+m+p)/p). Continue?")
@@ -508,7 +525,11 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
         if not response:
             return
 
-    # TODO make this choice explicit in the paper! practically we do not have knowledge of W so this is not exactly fair
+    # TODO make this choice explicit in the paper!
+    #  practically we do not have knowledge of W so this is not exactly fair practically,
+    #  but is useful for testing since it ensures the signal-to-noise ratio is high enough
+    #  for good sysID w/o taking a lot of data samples
+
     # Input exploration noise during explore and exploit phases
     u_explore_var = np.max(la.eig(W)[0])
     u_exploit_var = np.max(la.eig(W)[0])
@@ -608,17 +629,19 @@ if __name__ == "__main__":
 
     # Number of Monte Carlo samples
     # Ns = 100000
+    # Ns = 10000
     Ns = 1000
+    # Ns = 100
     # Ns = 10
     # Ns = 2
 
     # Number of bootstrap samples
-    # Nb = 100
-    Nb = 50
+    Nb = 100
+    # Nb = 50
     # Nb = 20
 
     # Simulation time
-    t_evals = np.array([200, 400, 800])
+    t_evals = np.array([20, 40, 80, 160, 320])
     # t_evals = np.arange(200, 300+1, 50)
     # t_evals = np.arange(200, 600+1, 50)
     T = np.max(t_evals)+1
@@ -637,7 +660,6 @@ if __name__ == "__main__":
     cost_horizon = 'infinite'
     horizon_method = None
     t_cost_fh = None
-
 
     # Random number generator seed
     seed = 1
@@ -666,8 +688,6 @@ if __name__ == "__main__":
 
 
     # Plotting
-    import matplotlib.pyplot as plt
-    from plotting import multi_plot, multi_plot_paper
     plt.close('all')
 
     # multi_plot(output_dict, cost_are_true, t_hist, t_start_estimate)
