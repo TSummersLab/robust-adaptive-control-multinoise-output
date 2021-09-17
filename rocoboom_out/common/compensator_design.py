@@ -73,7 +73,6 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
     n, m, p = A.shape[0], B.shape[1], C.shape[0]
 
     # TODO make sure the scaling is right for these since docs say they are with respect to outputs with unit variance
-    # TODO use the cross-covariance in gdare
     W = model.Q
     V = model.R
     U = model.S
@@ -84,7 +83,6 @@ def make_compensator(model, uncertainty, Y, R, noise_pre_scale=1.0, noise_post_s
     tag_list = []
 
     # TODO account for correlation between A, B, C multiplicative noises in gdare
-    # TODO include the (estimated) cross-covariance model.S between additive process & measurement noise in the gdare
 
     def solve_gdare(sysdata, X0=None, solver=None, solver_kwargs=None):
         if solver is None:
