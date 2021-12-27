@@ -81,7 +81,7 @@ def get_result(method):
     return Result(model, uncertainty, ss_models_boot, compensator, performance, design_info)
 
 
-def response_plot(ss, T=None, fig=None, axs=None, response_type='impulse', *args, **kwargs):
+def response_plot(ss, T=None, y_ref=None, fig=None, axs=None, response_type='impulse', *args, **kwargs):
     # Choose the response function
     if response_type == 'impulse':
         response_fun = control.impulse_response
@@ -95,14 +95,17 @@ def response_plot(ss, T=None, fig=None, axs=None, response_type='impulse', *args
 
     # Create plot
     if fig is None:
-        fig, axs = plt.subplots(nrows=p, ncols=m, sharex=True, figsize=(8, 6))
+        fig, axs = plt.subplots(nrows=p, ncols=m, sharex=True, figsize=(4, 3))
     for i in range(p):
         for j in range(m):
             ax = get_entry(axs, i, j, p, m)
             y = get_entry(ys, i, j, p, m)
+            if y_ref is not None:
+                yr = get_entry(y_ref, i, j, p, m)
+                y -= yr
             ax.plot(t, y, *args, **kwargs)
     fig.tight_layout()
-    return fig, axs
+    return t, ys, fig, axs
 
 
 def comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=None, num_models_boot_to_plot=100):
@@ -110,17 +113,18 @@ def comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=None, num_
     if t_sim is None:
         t_sim = T
 
-    fig, axs = response_plot(ss_true, t_sim, alpha=0.7, zorder=10, label='true')
-    fig, axs = response_plot(ss_model, t_sim, fig, axs, alpha=0.7, zorder=11, label='nominal')
+    t, ys_true = control.impulse_response(ss_true, t_sim)
+    t, ys_true, fig, axs = response_plot(ss_true, t_sim, ys_true, marker='o', alpha=0.7, zorder=10, label='True')
+    t, ys_model, fig, axs = response_plot(ss_model, t_sim, ys_true, fig, axs, marker='d', alpha=0.7, zorder=11, label='Nominal')
 
     for i, ss_model_boot in enumerate(ss_models_boot):
         if i > num_models_boot_to_plot:
             continue
         if i == 0:
-            label = 'boot'
+            label = 'Bootstrap samples'
         else:
             label = None
-        fig, axs = response_plot(ss_model_boot, t_sim, fig, axs, color='k', alpha=0.1, zorder=1, label=label)
+        t, ys_boot, fig, axs = response_plot(ss_model_boot, t_sim, ys_true, fig, axs, color='k', alpha=0.05, zorder=1, label=label)
 
     for i in range(p):
         for j in range(m):
@@ -158,10 +162,10 @@ def comparison_closed_loop_plot(result_dict, t_sim=None, disturb_method='zeros',
 
 def matrix_distplot(M_true, M_model, M_models_boot, title_str=None, plot_type='violin',
                     show_true=True, show_model=True, show_boot_mean=False, show_boot_median=False,
-                    show_samples=True, show_dist=True):
+                    show_samples=True, show_dist=True, show_legend=True):
     d1, d2 = M_true.shape
 
-    fig, axs = plt.subplots(nrows=d1, ncols=d2)
+    fig, axs = plt.subplots(nrows=d1, ncols=d2, figsize=(d2*3, d1*3))
     for i in range(d1):
         for j in range(d2):
             ax = get_entry(axs, i, j, d1, d2)
@@ -175,23 +179,25 @@ def matrix_distplot(M_true, M_model, M_models_boot, title_str=None, plot_type='v
 
             if show_dist:
                 if plot_type == 'violin':
-                    ax.violinplot(x_models_boot, positions=[0], showextrema=False, points=400)
+                    violinplot_parts = ax.violinplot(x_models_boot, positions=[0], showextrema=False, points=400)
+                    for part in violinplot_parts['bodies']:
+                        part.set_facecolor('k')
                 elif plot_type == 'box':
-                    ax.boxplot(x_models_boot, positions=[0], medianprops=dict(color='C0'))
+                    ax.boxplot(x_models_boot, positions=[0], medianprops=dict(color='C2'))
                 else:
                     raise ValueError
 
             linex = [-0.1, 0.1]
             if show_true:
-                ax.plot(linex, x_true*np.ones(2), c='C2', label='true')
+                ax.plot(linex, x_true*np.ones(2), c='C0', linestyle='--', lw=3, label='True')
             if show_model:
-                ax.plot(linex, x_model*np.ones(2), c='C1', label='nominal')
+                ax.plot(linex, x_model*np.ones(2), c='C1', linestyle='-', lw=3, label='Nominal')
             if show_boot_mean:
-                ax.plot(linex, x_models_boot_mean*np.ones(2), c='C0', label='boot mean')
+                ax.plot(linex, x_models_boot_mean*np.ones(2), c='k', label='Bootstrap mean')
             if show_boot_median:
-                ax.plot(linex, x_models_boot_median*np.ones(2), c='k', label='boot median')
+                ax.plot(linex, x_models_boot_median*np.ones(2), c='C2', label='Bootstrap median')
             if show_samples:
-                ax.scatter(np.zeros_like(x_models_boot), x_models_boot, s=40, c='C0', marker='o', alpha=0.4, label='boot samples')
+                ax.scatter(np.zeros_like(x_models_boot), x_models_boot, s=40, c='k', marker='o', alpha=0.2, label='Bootstrap samples')
 
             # Set the ylimit
             p = 1  # percentile
@@ -202,9 +208,10 @@ def matrix_distplot(M_true, M_model, M_models_boot, title_str=None, plot_type='v
             xlim_upr = np.max([x_models_boot_pct_upr, x_true+0.1*xpct_diff])
             ax.set_ylim([xlim_lwr, xlim_upr])
 
-            ax.legend()
+            if show_legend:
+                ax.legend()
     fig.suptitle(title_str)
-    # fig.tight_layout()
+    fig.tight_layout()
     return fig, axs
 
 
@@ -226,13 +233,16 @@ if __name__ == "__main__":
     T = t + 1  # This is the amount of data that will be simulated
 
 
-
-
     # Problem data
+    system_kwargs = dict()
+    # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('inverted_pendulum', **system_kwargs)
+    # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('noninverted_pendulum', **system_kwargs)
+
     # system_kwargs = dict(n=4, m=2, p=2, spectral_radius=0.9, noise_scale=0.1, seed=1)
     # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('rand', **system_kwargs)
 
     n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=1)
+
     ss_true = make_ss(A, B, C, D, W, V, U)
 
 
@@ -268,9 +278,14 @@ if __name__ == "__main__":
     v_hist = v_hist[0]
 
     t_train_hist = np.arange(T)
-    fig, ax = plt.subplots(nrows=2)
-    ax[0].step(t_train_hist, u_train_hist)
-    ax[1].step(t_train_hist, y_train_hist)
+
+    # # Plot
+    # fig, ax = plt.subplots(nrows=2)
+    # ax[0].step(t_train_hist, u_train_hist)
+    # ax[1].step(t_train_hist, y_train_hist)
+    # fig.suptitle('training data')
+    # ax[0].set_ylabel('input')
+    # ax[1].set_ylabel('output')
 
     # Estimate the system model and residuals
     model, res = system_identification(y_train_hist[0:t], u_train_hist[0:t], id_method='N4SID',
@@ -361,8 +376,8 @@ if __name__ == "__main__":
 
     ####################################################################################################################
     ss_models_boot = result_dict['rob'].ss_models_boot
-    comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=20)
-    comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=20)
+    comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=10)
+    # comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=20)
     ####################################################################################################################
 
 

@@ -12,6 +12,7 @@ from rocoboom_out.common.ss_tools import ss_change_coordinates, groupdot
 
 
 class Uncertainty:
+    # Small data class to hold multiplicative noise variances and direction matrices
     def __init__(self, a=None, Aa=None, b=None, Bb=None, c=None, Cc=None):
         self.a = a
         self.Aa = Aa
@@ -87,7 +88,6 @@ def semiparametric_bootstrap(model, u_hist, y_hist, w_hist, v_hist, t=None, Nb=N
         u_boot_hist[i] = u_hist[0:t]
 
         # Sample residuals iid with replacement
-        # TODO should we use different idx for process and sensor residuals/noises?
         idx = npr.randint(w_hist.shape[0], size=t)
         w_boot_hist[i] = w_hist[idx]
         v_boot_hist[i] = v_hist[idx]
@@ -245,13 +245,8 @@ def estimate_model_uncertainty(model, u_hist, y_hist, w_est, v_est, t, Nb,
             #
             # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_hat_hist, v_hat_hist, Nb=Nb)
 
-            # # This is what we intend to do - true semiparametric bootstrap
-            # # TODO figure out why w_est and v_est are so much smaller in magnitude than w_hist and v_hist
-            # #    can be verified by comparing model.Q vs W and model.R vs V which are the process & sensor noise covariances
-            # u_boot_hist, y_boot_hist = semiparametric_bootstrap(model, u_hist, y_hist, w_est, v_est, Nb=Nb)
-
-            # u_boot_hist, y_boot_hist = block_bootstrap(u_hist, y_hist, Nb=100, blocksize=100)
-
+            # # TODO investigate why sometimes w_est and v_est are so much smaller in magnitude than w_hist and v_hist
+            # #      can be verified by comparing model.Q vs W and model.R vs V which are the process & sensor noise covariances
 
             # Form bootstrap model estimates from bootstrap datasets
             # and convert covariances into multiplicative noises

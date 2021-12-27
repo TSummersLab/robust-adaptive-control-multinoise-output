@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from utility.matrixmath import specrad, vec, mat
 
 
-def diff(X, Y):
+def mat_diff(X, Y):
     return la.norm(X-Y, ord=2, axis=(1, 2))
 
 
@@ -23,6 +23,7 @@ def rand_psd(d, s=None):
     return P
 
 
+# TODO move to problem_data_gen
 def make_noise_data(Sigma, d1, d2):
     d12 = d1*d2
     a, V = la.eig(Sigma)
@@ -32,6 +33,7 @@ def make_noise_data(Sigma, d1, d2):
     return a, Aa
 
 
+# TODO move to problem_data_gen
 def make_system_data(n=4, m=3, p=2, r=0.99, s=1.0):
     # nominal system matrices
     A = npr.randn(n, n)
@@ -60,6 +62,7 @@ def make_system_data(n=4, m=3, p=2, r=0.99, s=1.0):
     return sysdata
 
 
+# TODO move to problem_data_gen
 def example_sysdata(beta=0.1):
     # de Koning 1992 example
     # beta = 0.0 deterministic case, beta = 0.2 ms-compensatable, beta = 0.3 not ms-compensatable
@@ -460,12 +463,12 @@ def value_iteration(sysdata=None, X=None, tol=1e-9, dmax=1e99, max_iters=1000, v
     i = 0
     while True:
         X = ricc(X_prev, sysdata)
-        d = diff(X, X_prev)
+        d = mat_diff(X, X_prev)
         if verbose:
             spacer = '  '
             print('%6d' % i, end=spacer)
             print(d, end=spacer)  # Riccati residual
-            # print(np.sort(np.real(la.eig(X_prev[0] - X[0])[0])))  # eigs of X diff from last iter
+            # print(np.sort(np.real(la.eig(X_prev[0] - X[0])[0])))  # eigs of X mat_diff from last iter
             print(cost(*gain(X, sysdata), sysdata))
         if np.all(d < tol):
             return X

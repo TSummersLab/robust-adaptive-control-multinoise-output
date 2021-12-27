@@ -80,7 +80,7 @@ def gen_pendulum_system(inverted, mass=10, damp=2, dt=0.1, Y=None, R=None, W=Non
     else:
         sign = -1
     A = np.array([[1.0, dt],
-                  [sign*mass*dt, 1-damp*dt]])
+                  [sign*mass*dt, 1.0-damp*dt]])
     B = np.array([[0],
                   [dt]])
     C = np.array([[1.0, 0.0]])
@@ -126,6 +126,23 @@ def gen_example_system(idx, noise_scale=1.0):
         # A += 0.1*npr.randn(n, n)
         # B += 0.1*npr.randn(n, m)
         # C += 0.1*npr.randn(p, n)
+
+    elif idx == 2:
+        # 3-state system from https://arxiv.org/pdf/1710.01688.pdf
+        # Possibly interesting lack of robustness under CE control
+        n, m, p = 3, 3, 3
+        A = np.array([[1.01, 0.01, 0.00],
+                      [0.01, 1.01, 0.01],
+                      [0.00, 0.01, 1.01]])
+        B = np.eye(3)
+        C = np.eye(3)
+        D = np.zeros([3, 3])
+        Y = np.eye(p)
+        Q = np.dot(C.T, np.dot(Y, C))
+        R = 0.01*np.eye(m)
+        W = 0.1*np.eye(n)
+        V = 0.1*np.eye(p)
+        U = np.zeros([n, p])
 
     else:
         raise Exception('Invalid system index chosen, please choose a different one')

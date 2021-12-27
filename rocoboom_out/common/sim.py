@@ -40,7 +40,7 @@ def make_disturbance(n, p, Ns, T, W, V):
     return w_hist, v_hist
 
 
-def lsim(A, B, C, D, Ns, T, u_hist, w_hist, v_hist, x0=None):
+def lsim(A, B, C, D, Ns, T, u_hist, w_hist, v_hist, x0=None, verbose=False):
     """
     Simulate multiple state-input-output trajectories of a stochastic linear system
     with additive process and measurement disturbances.
@@ -78,6 +78,8 @@ def lsim(A, B, C, D, Ns, T, u_hist, w_hist, v_hist, x0=None):
         x_hist[:, t+1] = groupdot(A, x_hist[:, t]) + groupdot(B, u_hist[:, t]) + w_hist[:, t]
         # Update output
         y_hist[:, t] = groupdot(C, x_hist[:, t]) + groupdot(D, u_hist[:, t]) + v_hist[:, t]
+        if verbose:
+            print('lsim step %d / %d complete'  % (t, T))
 
     return x_hist, y_hist
 
@@ -105,16 +107,30 @@ def make_offline_data(A, B, C, D, W, V, Ns, T, u_var, x0=None, verbose=False):
     v_hist: Additive measurement noise history
     """
     if verbose:
-        print("Generating offline sample trajectory data...    ", end='')
+        print("Generating offline sample trajectory data...    ")
 
     n, m = B.shape
     p, n = C.shape
-
+    if verbose:
+        print("Generating exploration input data...    ", end='')
     u_hist = make_exploration(m, Ns, T, u_var)
-    w_hist, v_hist = make_disturbance(n, p, Ns, T, W, V)
-    x_hist, y_hist = lsim(A, B, C, D, Ns, T, u_hist, w_hist, v_hist, x0)
     if verbose:
         print("...completed!")
+
+    if verbose:
+        print("Generating disturbance data...    ", end='')
+    w_hist, v_hist = make_disturbance(n, p, Ns, T, W, V)
+    if verbose:
+        print("...completed!")
+
+    if verbose:
+        print("Generating disturbance data...    ", end='')
+    x_hist, y_hist = lsim(A, B, C, D, Ns, T, u_hist, w_hist, v_hist, x0, verbose=verbose)
+    if verbose:
+        print("...completed!")
+
+    if verbose:
+        print("...offline sample data completed!")
     return x_hist, u_hist, y_hist, w_hist, v_hist
 
 

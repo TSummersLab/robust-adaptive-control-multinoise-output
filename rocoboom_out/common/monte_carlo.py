@@ -2,7 +2,7 @@
 Robust adaptive control from output measurements via multiplicative noise from bootstrapped uncertainty estimates.
 """
 
-
+import argparse
 from time import time
 import os
 import multiprocessing as mp
@@ -75,13 +75,13 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
 
     # Preallocate history arrays
     # State and input
-    x_test_hist = np.zeros([T+1, n])
-    u_test_hist = np.zeros([T, m])
-    y_test_hist = np.zeros([T, p])
+    # x_test_hist = np.zeros([T+1, n])
+    # u_test_hist = np.zeros([T, m])
+    # y_test_hist = np.zeros([T, p])
 
-    x_opt_test_hist = np.zeros([T+1, n])
-    u_opt_test_hist = np.zeros([T, m])
-    y_opt_test_hist = np.zeros([T, p])
+    # x_opt_test_hist = np.zeros([T+1, n])
+    # u_opt_test_hist = np.zeros([T, m])
+    # y_opt_test_hist = np.zeros([T, p])
 
     # Gain
     F_hist = np.zeros([T, n, n])
@@ -120,7 +120,6 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
     Aerr_hist = np.full(T, np.inf)
     Berr_hist = np.full(T, np.inf)
     Cerr_hist = np.full(T, np.inf)
-
 
     # Loop over time
     for t in range(T):
@@ -189,8 +188,8 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
                 uncertainty = None
 
             compensator, gamma_reduction, tag_list_cg = make_compensator(model, uncertainty, Y, R,
-                                                                             noise_pre_scale, noise_post_scale,
-                                                                             bisection_epsilon, log_diagnostics)
+                                                                         noise_pre_scale, noise_post_scale,
+                                                                         bisection_epsilon, log_diagnostics)
             F, K, L = compensator.F, compensator.K, compensator.L
             gamma_reduction_hist[t] = gamma_reduction
             if log_diagnostics:
@@ -304,12 +303,12 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
             'x_train_hist': x_train_hist,
             'u_train_hist': u_train_hist,
             'y_train_hist': u_train_hist,
-            'x_test_hist': x_test_hist,
-            'u_test_hist': u_test_hist,
-            'y_test_hist': y_test_hist,
-            'x_opt_test_hist': x_opt_test_hist,
-            'u_opt_test_hist': u_opt_test_hist,
-            'y_opt_test_hist': y_opt_test_hist,
+            # 'x_test_hist': x_test_hist,  # unused
+            # 'u_test_hist': u_test_hist,
+            # 'y_test_hist': y_test_hist,
+            # 'x_opt_test_hist': x_opt_test_hist,
+            # 'u_opt_test_hist': u_opt_test_hist,
+            # 'y_opt_test_hist': y_opt_test_hist,
             'F_hist': F_hist,
             'K_hist': K_hist,
             'L_hist': L_hist,
@@ -335,35 +334,36 @@ def monte_carlo_group(control_scheme, uncertainty_estimator, required_args,
     y_train_hist = conditional_args['y_train_hist']
 
     # Simulate each Monte Carlo trial
-    shape_dict = {'x_train_hist': [T+1, n],
-                  'u_train_hist': [T, m],
-                  'y_train_hist': [T, p],
-                  'x_test_hist': [T+1, n],
-                  'x_opt_test_hist': [T+1, n],
-                  'u_test_hist': [T, m],
-                  'u_opt_test_hist': [T, m],
-                  'y_test_hist': [T, p],
-                  'y_opt_test_hist': [T, p],
-                  'F_hist': [T, n, n],
-                  'K_hist': [T, m, n],
-                  'L_hist': [T, n, p],
-                  'Ahat_hist': [T, n, n],
-                  'Bhat_hist': [T, n, m],
-                  'Chat_hist': [T, p, n],
-                  'What_hist': [T, n, n],
-                  'Vhat_hist': [T, p, p],
-                  'Uhat_hist': [T, n, p],
+    shape_dict = {
+                  # 'x_train_hist': [T+1, n],  # Disabling to reduce storage space
+                  # 'u_train_hist': [T, m],
+                  # 'y_train_hist': [T, p],
+                  # 'x_test_hist': [T+1, n],  # Unused
+                  # 'u_test_hist': [T, m],
+                  # 'y_test_hist': [T, p],
+                  # 'x_opt_test_hist': [T+1, n],
+                  # 'u_opt_test_hist': [T, m],
+                  # 'y_opt_test_hist': [T, p],
+                  # 'F_hist': [T, n, n],  # Disabling to reduce storage space
+                  # 'K_hist': [T, m, n],
+                  # 'L_hist': [T, n, p],
+                  # 'Ahat_hist': [T, n, n],  # Disabling to reduce storage space
+                  # 'Bhat_hist': [T, n, m],
+                  # 'Chat_hist': [T, p, n],
+                  # 'What_hist': [T, n, n],
+                  # 'Vhat_hist': [T, p, p],
+                  # 'Uhat_hist': [T, n, p],
                   'a_hist': [T, n*n],
                   'b_hist': [T, n*m],
                   'c_hist': [T, p*n],
-                  'Aahist': [T, n*n, n, n],
-                  'Bbhist': [T, n*m, n, m],
-                  'Cchist': [T, p*n, p, n],
+                  # 'Aahist': [T, n*n, n, n],  # Disabling to reduce storage space
+                  # 'Bbhist': [T, n*m, n, m],
+                  # 'Cchist': [T, p*n, p, n],
                   'gamma_reduction_hist': [T],
                   'specrad_hist': [T],
                   'cost_future_hist': [T],
-                  'cost_adaptive_hist': [T],
-                  'cost_optimal_hist': [T],
+                  # 'cost_adaptive_hist': [T],  # Disabling to reduce storage space
+                  # 'cost_optimal_hist': [T],
                   'Aerr_hist': [T],
                   'Berr_hist': [T],
                   'Cerr_hist': [T],
@@ -413,6 +413,7 @@ def monte_carlo_group(control_scheme, uncertainty_estimator, required_args,
     return output_dict
 
 
+# TODO unused for now
 def compute_derived_data(output_dict, receding_horizon=5):
     """
     Compute derived cost data quantities from the results.
@@ -422,47 +423,49 @@ def compute_derived_data(output_dict, receding_horizon=5):
     output_dict is modified/mutated
     """
 
-    for control_scheme in output_dict.keys():
-        cost_adaptive_hist = output_dict[control_scheme]['cost_adaptive_hist']
-        cost_optimal_hist = output_dict[control_scheme]['cost_optimal_hist']
+    # for control_scheme in output_dict.keys():
+    #     cost_adaptive_hist = output_dict[control_scheme]['cost_adaptive_hist']
+    #     cost_optimal_hist = output_dict[control_scheme]['cost_optimal_hist']
+    #
+    #     # Compute receding horizon data
+    #     Ns, T = cost_adaptive_hist.shape
+    #     cost_adaptive_hist_receding = np.full([Ns, T], np.inf)
+    #     cost_optimal_hist_receding = np.full([Ns, T], np.inf)
+    #     for k in range(Ns):
+    #         for t in range(T):
+    #             if t > receding_horizon:
+    #                 cost_adaptive_hist_receding[k, t] = np.mean(cost_adaptive_hist[k, t-receding_horizon:t])
+    #                 cost_optimal_hist_receding[k, t] = np.mean(cost_optimal_hist[k, t-receding_horizon:t])
+    #
+    #     # Compute accumulated cost
+    #     cost_adaptive_hist_accum = np.full([Ns, T], np.inf)
+    #     cost_optimal_hist_accum = np.full([Ns, T], np.inf)
+    #     for k in range(Ns):
+    #         for t in range(T):
+    #             cost_adaptive_hist_accum[k, t] = np.sum(cost_adaptive_hist[k, 0:t])
+    #             cost_optimal_hist_accum[k, t] = np.sum(cost_optimal_hist[k, 0:t])
+    #
+    #     # Compute regret and regret_ratio
+    #     regret_hist = cost_adaptive_hist - np.mean(cost_optimal_hist, axis=0)
+    #     regret_hist_receding = cost_adaptive_hist_receding - np.mean(cost_optimal_hist_receding, axis=0)
+    #     regret_hist_accum = cost_adaptive_hist_accum - np.mean(cost_optimal_hist_accum, axis=0)
+    #
+    #     regret_ratio_hist = cost_adaptive_hist / np.mean(cost_optimal_hist, axis=0)
+    #     regret_ratio_hist_receding = cost_adaptive_hist_receding / np.mean(cost_optimal_hist_receding, axis=0)
+    #     regret_ratio_hist_accum = cost_adaptive_hist_accum / np.mean(cost_optimal_hist_accum, axis=0)
+    #
+    #     output_dict[control_scheme]['cost_adaptive_hist_receding'] = cost_adaptive_hist_receding
+    #     output_dict[control_scheme]['cost_optimal_hist_receding'] = cost_optimal_hist_receding
+    #     output_dict[control_scheme]['cost_adaptive_hist_accum'] = cost_adaptive_hist_accum
+    #     output_dict[control_scheme]['cost_optimal_hist_accum'] = cost_optimal_hist_accum
+    #     output_dict[control_scheme]['regret_hist'] = regret_hist
+    #     output_dict[control_scheme]['regret_hist_receding'] = regret_hist_receding
+    #     output_dict[control_scheme]['regret_hist_accum'] = regret_hist_accum
+    #     output_dict[control_scheme]['regret_ratio_hist'] = regret_ratio_hist
+    #     output_dict[control_scheme]['regret_ratio_hist_receding'] = regret_ratio_hist_receding
+    #     output_dict[control_scheme]['regret_ratio_hist_accum'] = regret_ratio_hist_accum
 
-        # Compute receding horizon data
-        Ns, T = cost_adaptive_hist.shape
-        cost_adaptive_hist_receding = np.full([Ns, T], np.inf)
-        cost_optimal_hist_receding = np.full([Ns, T], np.inf)
-        for k in range(Ns):
-            for t in range(T):
-                if t > receding_horizon:
-                    cost_adaptive_hist_receding[k, t] = np.mean(cost_adaptive_hist[k, t-receding_horizon:t])
-                    cost_optimal_hist_receding[k, t] = np.mean(cost_optimal_hist[k, t-receding_horizon:t])
-
-        # Compute accumulated cost
-        cost_adaptive_hist_accum = np.full([Ns, T], np.inf)
-        cost_optimal_hist_accum = np.full([Ns, T], np.inf)
-        for k in range(Ns):
-            for t in range(T):
-                cost_adaptive_hist_accum[k, t] = np.sum(cost_adaptive_hist[k, 0:t])
-                cost_optimal_hist_accum[k, t] = np.sum(cost_optimal_hist[k, 0:t])
-
-        # Compute regret and regret_ratio
-        regret_hist = cost_adaptive_hist - np.mean(cost_optimal_hist, axis=0)
-        regret_hist_receding = cost_adaptive_hist_receding - np.mean(cost_optimal_hist_receding, axis=0)
-        regret_hist_accum = cost_adaptive_hist_accum - np.mean(cost_optimal_hist_accum, axis=0)
-
-        regret_ratio_hist = cost_adaptive_hist / np.mean(cost_optimal_hist, axis=0)
-        regret_ratio_hist_receding = cost_adaptive_hist_receding / np.mean(cost_optimal_hist_receding, axis=0)
-        regret_ratio_hist_accum = cost_adaptive_hist_accum / np.mean(cost_optimal_hist_accum, axis=0)
-
-        output_dict[control_scheme]['cost_adaptive_hist_receding'] = cost_adaptive_hist_receding
-        output_dict[control_scheme]['cost_optimal_hist_receding'] = cost_optimal_hist_receding
-        output_dict[control_scheme]['cost_adaptive_hist_accum'] = cost_adaptive_hist_accum
-        output_dict[control_scheme]['cost_optimal_hist_accum'] = cost_optimal_hist_accum
-        output_dict[control_scheme]['regret_hist'] = regret_hist
-        output_dict[control_scheme]['regret_hist_receding'] = regret_hist_receding
-        output_dict[control_scheme]['regret_hist_accum'] = regret_hist_accum
-        output_dict[control_scheme]['regret_ratio_hist'] = regret_ratio_hist
-        output_dict[control_scheme]['regret_ratio_hist_receding'] = regret_ratio_hist_receding
-        output_dict[control_scheme]['regret_ratio_hist_accum'] = regret_ratio_hist_accum
+    pass
 
 
 def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_post_scale,
@@ -502,14 +505,11 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
     performance_true = compute_performance(A, B, C, Q, R, W, V, Fopt, Kopt, Lopt)
     specrad_true, cost_are_true = performance_true.sr, performance_true.ihc
 
-
-
     # Time history
     t_hist = np.arange(T)
 
     # Time to begin forming model estimates
     t_start_estimate_lwr = int(n*(n+m+p)/p)
-
     t_start_estimate = 2*t_start_estimate_lwr
 
     if t_start_estimate < t_start_estimate_lwr:
@@ -525,15 +525,14 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
         if not response:
             return
 
-    # TODO make this choice explicit in the paper!
+    # We made this choice explicit in the paper!
     #  practically we do not have knowledge of W so this is not exactly fair practically,
     #  but is useful for testing since it ensures the signal-to-noise ratio is high enough
     #  for good sysID w/o taking a lot of data samples
 
     # Input exploration noise during explore and exploit phases
-    u_explore_var = np.max(la.eig(W)[0])
-    u_exploit_var = np.max(la.eig(W)[0])
-
+    u_explore_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
+    u_exploit_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
 
     # Bisection tolerance
     bisection_epsilon = 0.01
@@ -558,7 +557,7 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
     output_dict = {}
 
     # Generate sample trajectory data (pure exploration)
-    x_train_hist, u_train_hist, y_train_hist, w_hist, v_hist = make_offline_data(A, B, C, D, W, V, Ns, T, u_explore_var, x0)
+    x_train_hist, u_train_hist, y_train_hist, w_hist, v_hist = make_offline_data(A, B, C, D, W, V, Ns, T, u_explore_var, x0, verbose=True)
 
     # Evaluate control schemes
     required_args = {'n': n,
@@ -616,11 +615,16 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
 
 
 if __name__ == "__main__":
-    # # Choose between offline and online training data
-    # training_type = 'offline'
-    #
-    # # Choose between offline and online testing
-    # testing_type = 'online'
+    # Create the parser and add arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=0,
+                        help="Global seed for the Monte Carlo batch (default=0).")
+    parser.add_argument('--num_trials', type=int, default=100,
+                        help="Number of trials in the Monte Carlo batch (default=100).")
+
+    # Parse
+    args = parser.parse_args()
+    seed = args.seed
 
     # Choose the uncertainty estimation scheme
     # uncertainty_estimator = 'exact'
@@ -628,20 +632,22 @@ if __name__ == "__main__":
     uncertainty_estimator = 'semiparametric_bootstrap'
 
     # Number of Monte Carlo samples
-    # Ns = 100000
+    # Ns = 100000  # Used in paper
     # Ns = 10000
-    Ns = 1000
+    # Ns = 1000
     # Ns = 100
     # Ns = 10
     # Ns = 2
+    Ns = args.num_trials
 
     # Number of bootstrap samples
-    Nb = 100
+    Nb = 100  # Used in paper
     # Nb = 50
     # Nb = 20
 
     # Simulation time
-    t_evals = np.array([20, 40, 80, 160, 320])
+    t_evals = np.array([20, 40, 80, 160, 320])  # Used in paper
+    # t_evals = np.arange(20, 320, step=10)
     # t_evals = np.arange(200, 300+1, 50)
     # t_evals = np.arange(200, 600+1, 50)
     T = np.max(t_evals)+1
@@ -662,10 +668,10 @@ if __name__ == "__main__":
     t_cost_fh = None
 
     # Random number generator seed
-    seed = 1
     # seed = npr.randint(1000)
 
     # System to choose
+    # system_idx = 'inverted_pendulum'
     # system_idx = 'scalar'
     # system_idx = 'rand'
     system_idx = 1
@@ -684,11 +690,9 @@ if __name__ == "__main__":
 
     # Run main
     output_dict, cost_are_true, t_hist, t_start_estimate = mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_post_scale,
-                          cost_horizon, horizon_method, t_cost_fh, system_idx, system_kwargs, seed, parallel_option)
-
+                                                                   cost_horizon, horizon_method, t_cost_fh, system_idx, system_kwargs, seed, parallel_option)
 
     # Plotting
     plt.close('all')
 
-    # multi_plot(output_dict, cost_are_true, t_hist, t_start_estimate)
     multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_evals)
