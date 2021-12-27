@@ -1,3 +1,6 @@
 [submodule "utility"]
 	path = utility
 	url = https://github.com/BenGravell/utility.git
+[submodule "SIPPY"]
+	path = SIPPY
+	url = https://github.com/CPCLAB-UNIPI/SIPPY.git

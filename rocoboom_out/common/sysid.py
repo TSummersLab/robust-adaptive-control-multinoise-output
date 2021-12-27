@@ -1,4 +1,7 @@
-# Copied & modified from SIPPY package
+# Copied & modified from the files
+# SIPPY/sippy/__init__.py
+# SIPPY/sippy/OLSims_methods.py
+# in the SIPPY package
 
 
 import sys
@@ -31,7 +34,8 @@ def system_identification(y, u, id_method='N4SID',
     # Checking data consistency
     if ulength != ylength:
         sys.stdout.write("\033[0;35m")
-        print("Warning! y and u lengths are not the same. The minor value between the two lengths has been chosen. The performed indentification may be not correct, be sure to check your input and output data alignement")
+        print("Warning! y and u lengths are not the same. The minor value between the two lengths has been chosen. "
+              "The performed identification may be not correct, be sure to check your input and output data alignment")
         sys.stdout.write(" ")
         # Recasting data cutting out the over numbered data
         minlength = min(ulength, ylength)
