@@ -9,6 +9,7 @@
 - control 
 - cvxpy
 - casadi
+- [SIPPY](https://github.com/CPCLAB-UNIPI/SIPPY) (included as a submodule by this repo)
 
 ### Conda 
 
@@ -46,6 +47,6 @@ git submodule update --init
 
 at the root of the repository.
 
-### Conda
+## Usage
 
-TODO
+Run `monte_carlo.py` to see a lightweight test run using only 100 Monte Carlo trials. This should take a couple minutes at most to run and should produce several plots with various metrics (the same metrics depicted in the paper).
