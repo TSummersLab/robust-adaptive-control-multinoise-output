@@ -36,7 +36,7 @@ pip install casadi
 ## Cloning the Package
 The package contains submodules. Please clone with:
 ```
-git clone [TODO URL].git --recurse
+git clone https://github.com/TSummersLab/robust-adaptive-control-multinoise-output.git --recurse
 ```
 Note: When using GitHub desktop, the application initializes all submodules when cloning for the first time.
 If a submodule is not initialized after pulling changes, please use the Git Bash tool or terminal and run the command
