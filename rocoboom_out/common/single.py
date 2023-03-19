@@ -102,7 +102,7 @@ def response_plot(ss, T=None, y_ref=None, fig=None, axs=None, response_type='imp
             y = get_entry(ys, i, j, p, m)
             if y_ref is not None:
                 yr = get_entry(y_ref, i, j, p, m)
-                y -= yr
+                # y -= yr  # Remove the true response so that the plotted quantity is the deviation response
             ax.plot(t, y, *args, **kwargs)
     fig.tight_layout()
     return t, ys, fig, axs
@@ -119,7 +119,7 @@ def comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=None, num_
 
     for i, ss_model_boot in enumerate(ss_models_boot):
         if i > num_models_boot_to_plot:
-            continue
+            break
         if i == 0:
             label = 'Bootstrap samples'
         else:
@@ -241,13 +241,15 @@ if __name__ == "__main__":
     # system_kwargs = dict(n=4, m=2, p=2, spectral_radius=0.9, noise_scale=0.1, seed=1)
     # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni('rand', **system_kwargs)
 
-    n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=1)
+    # n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=1)
+    n, m, p, A, B, C, D, Y, Q, R, W, V, U = gen_system_omni(system_idx=3)
 
     ss_true = make_ss(A, B, C, D, W, V, U)
 
 
     # Exploration control signal
-    u_explore_var = 10*(np.max(la.eig(W)[0]) + np.max(la.eig(V)[0]))
+    # u_explore_var = 10*(np.max(la.eig(W)[0]) + np.max(la.eig(V)[0]))  # for 2-state shift register
+    u_explore_var = 1000*(np.max(la.eig(W)[0]) + np.max(la.eig(V)[0]))
     # u_explore_var = 10.0
 
     noise_pre_scale = 1.0
@@ -376,7 +378,7 @@ if __name__ == "__main__":
 
     ####################################################################################################################
     ss_models_boot = result_dict['rob'].ss_models_boot
-    comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=10)
+    comparison_response_plot(ss_true, ss_model, ss_models_boot, t_sim=40)
     # comparison_closed_loop_plot(result_dict, disturb_method='wgn', disturb_scale=0.1, t_sim=20)
     ####################################################################################################################
 

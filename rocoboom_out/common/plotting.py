@@ -50,11 +50,19 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
     # rc('text', usetex=True)
 
     control_schemes = list(output_dict.keys())
-    diff_scheme = control_schemes[0]+' minus '+control_schemes[1]
+    control_schemes_compare_pairs = [('certainty_equivalent', 'robust'),
+                                     ('robust_iso', 'robust')]
+    diff_scheme1 = control_schemes_compare_pairs[0][0] + ' minus ' + control_schemes_compare_pairs[0][1]
+    diff_scheme2 = control_schemes_compare_pairs[1][0] + ' minus ' + control_schemes_compare_pairs[1][1]
+    diff_schemes =[diff_scheme1, diff_scheme2]
 
     plot_fields = ['cost_future_hist',
                    'cost_future_hist',
                    'cost_future_hist',
+                   'cost_future_hist',
+                   'cost_future_hist',
+                   'specrad_hist',
+                   'specrad_hist',
                    'specrad_hist',
                    'specrad_hist',
                    'specrad_hist',
@@ -64,25 +72,35 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                    'a_hist',
                    'b_hist',
                    'c_hist',
+                   'gamma_reduction_hist',
                    'gamma_reduction_hist']
     plot_control_schemes = ['certainty_equivalent',
                             'robust',
-                            diff_scheme,
+                            'robust_iso',
+                            diff_scheme1,
+                            diff_scheme2,
                             'certainty_equivalent',
                             'robust',
-                            diff_scheme,
+                            'robust_iso',
+                            diff_scheme1,
+                            diff_scheme2,
                             'robust',
                             'robust',
                             'robust',
                             'robust',
                             'robust',
                             'robust',
-                            'robust']
+                            'robust',
+                            'robust_iso']
     ylabels = ['Inf.-horz. perf.',
                'Inf.-horz. perf.',
+               'Inf.-horz. perf.',
+               'Inf.-horz. perf. diff.',
                'Inf.-horz. perf. diff.',
                'Spec. rad.',
                'Spec. rad.',
+               'Spec. rad.',
+               'Spec. rad. diff.',
                'Spec. rad. diff.',
                r'$\Vert \hat{A}-A \Vert$',
                r'$\Vert \hat{B}-B \Vert$',
@@ -90,20 +108,26 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                r'$a$',
                r'$b$',
                r'$c$',
+               r'$c_\gamma$',
                r'$c_\gamma$']
     filenames = ['cost_future_ce',
                  'cost_future_rmn',
+                 'cost_future_iso',
                  'cost_future_diff',
+                 'cost_future_diff_iso',
                  'specrad_ce',
                  'specrad_rmn',
+                 'specrad_iso',
                  'specrad_diff',
+                 'specrad_diff_iso',
                  'Aerr',
                  'Berr',
                  'Cerr',
                  'a',
                  'b',
                  'c',
-                 'gamma_scale']
+                 'gamma_scale',
+                 'gamma_scale_iso']
 
     quantiles = [1.00, 0.999, 0.99, 0.95, 0.75]
     quantiles = np.array(quantiles)
@@ -167,30 +191,30 @@ def multi_plot_paper(output_dict, cost_are_true, t_hist, t_start_estimate, t_eva
                 ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata, 1-quantile, axis=0)
 
     # Compute statistic differences
-    control_scheme = control_schemes[0] + ' minus ' + control_schemes[1]
-    control_schemes.append(control_scheme)
-    ydata_dict[control_scheme] = {}
-    for field in plot_fields:
-        ydata_dict[control_scheme][field] = {}
-        for statistic in statistics:
-            # Choose whether to calculate statistics before or after taking the difference
-            if stat_diff_type=='diff_of_stat':
-                stat1 = ydata_dict[control_schemes[0]][field][statistic]
-                stat2 = ydata_dict[control_schemes[1]][field][statistic]
-                ydata_dict[control_scheme][field][statistic] = stat1 - stat2
-            elif stat_diff_type=='stat_of_diff':
-                #TODO: reuse statistic computation code above
-                ydata1 = ydata_dict[control_schemes[0]][field]['ydata']
-                ydata2 = ydata_dict[control_schemes[1]][field]['ydata']
-                ydata_diff = ydata1 - ydata2
-                ydata_dict[control_scheme][field]['ydata'] = ydata_diff
-                # Compute statistics
-                ydata_dict[control_scheme][field]['median'] = np.median(ydata_diff, axis=0)
-                ydata_dict[control_scheme][field]['mean'] = np.mean(ydata_diff, axis=0)
-                ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata_diff, proportiontocut=1-trim_mean_quantile, axis=0)
-                for quantile in quantiles:
-                    ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata_diff, quantile, axis=0)
-                    ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata_diff, 1-quantile, axis=0)
+    for control_scheme, compare_pair in zip(diff_schemes, control_schemes_compare_pairs):
+        control_schemes.append(control_scheme)
+        ydata_dict[control_scheme] = {}
+        for field in plot_fields:
+            ydata_dict[control_scheme][field] = {}
+            for statistic in statistics:
+                # Choose whether to calculate statistics before or after taking the difference
+                if stat_diff_type=='diff_of_stat':
+                    stat1 = ydata_dict[compare_pair[0]][field][statistic]
+                    stat2 = ydata_dict[compare_pair[1]][field][statistic]
+                    ydata_dict[control_scheme][field][statistic] = stat1 - stat2
+                elif stat_diff_type=='stat_of_diff':
+                    #TODO: reuse statistic computation code above
+                    ydata1 = ydata_dict[compare_pair[0]][field]['ydata']
+                    ydata2 = ydata_dict[compare_pair[1]][field]['ydata']
+                    ydata_diff = ydata1 - ydata2
+                    ydata_dict[control_scheme][field]['ydata'] = ydata_diff
+                    # Compute statistics
+                    ydata_dict[control_scheme][field]['median'] = np.median(ydata_diff, axis=0)
+                    ydata_dict[control_scheme][field]['mean'] = np.mean(ydata_diff, axis=0)
+                    ydata_dict[control_scheme][field]['trimmed_mean'] = trim_mean(ydata_diff, proportiontocut=1-trim_mean_quantile, axis=0)
+                    for quantile in quantiles:
+                        ydata_dict[control_scheme][field]['quantile_'+str(quantile)] = np.quantile(ydata_diff, quantile, axis=0)
+                        ydata_dict[control_scheme][field]['quantile_'+str(1-quantile)] = np.quantile(ydata_diff, 1-quantile, axis=0)
 
     # x start index
     x_start_idx = t_start_estimate

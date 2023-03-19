@@ -184,6 +184,23 @@ def monte_carlo_sample(control_scheme, uncertainty_estimator, required_args,
                 Aahist[t] = uncertainty.Aa
                 Bbhist[t] = uncertainty.Bb
                 Cchist[t] = uncertainty.Cc
+
+            elif control_scheme == 'robust_iso':
+                uncertainty_dict = estimate_model_uncertainty(model, u_train_hist, y_train_hist, w_est, v_est, t, Nb,
+                                                              uncertainty_estimator)
+                uncertainty = uncertainty_dict['uncertainty']
+                # Make uncertainty isotropic
+                uncertainty.a = np.max(uncertainty.a)*np.ones_like(uncertainty.a)
+                uncertainty.b = np.max(uncertainty.b)*np.ones_like(uncertainty.b)
+                uncertainty.c = np.max(uncertainty.c)*np.ones_like(uncertainty.c)
+
+                # Record multiplicative noise history
+                a_hist[t] = uncertainty.a
+                b_hist[t] = uncertainty.b
+                c_hist[t] = uncertainty.c
+                Aahist[t] = uncertainty.Aa
+                Bbhist[t] = uncertainty.Bb
+                Cchist[t] = uncertainty.Cc
             else:
                 uncertainty = None
 
@@ -531,8 +548,11 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
     #  for good sysID w/o taking a lot of data samples
 
     # Input exploration noise during explore and exploit phases
-    u_explore_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
-    u_exploit_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
+    # u_explore_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
+    # u_exploit_var = np.max(np.abs(la.eig(W)[0])) + np.max(np.abs(la.eig(V)[0]))
+
+    u_explore_var = 0.1
+    u_exploit_var = 0.1
 
     # Bisection tolerance
     bisection_epsilon = 0.01
@@ -553,7 +573,8 @@ def mainfun(uncertainty_estimator, Ns, Nb, T, t_evals, noise_pre_scale, noise_po
     pickle_export(dirname_out, filename_out, sim_options)
 
     # control_schemes = ['certainty_equivalent']
-    control_schemes = ['certainty_equivalent', 'robust']
+    # control_schemes = ['certainty_equivalent', 'robust']
+    control_schemes = ['certainty_equivalent', 'robust', 'robust_iso']
     output_dict = {}
 
     # Generate sample trajectory data (pure exploration)
@@ -672,9 +693,11 @@ if __name__ == "__main__":
 
     # System to choose
     # system_idx = 'inverted_pendulum'
+    # system_idx = 'noninverted_pendulum'
     # system_idx = 'scalar'
     # system_idx = 'rand'
-    system_idx = 1
+    # system_idx = 1
+    system_idx = 3
 
     if system_idx == 'scalar':
         system_kwargs = dict(A=1, B=1, Q=1, R=0, W=1, V=0.1)

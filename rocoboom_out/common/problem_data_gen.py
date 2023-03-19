@@ -72,9 +72,8 @@ def gen_pendulum_system(inverted, mass=10, damp=2, dt=0.1, Y=None, R=None, W=Non
     # x[0] = angular position
     # x[1] = angular velocity
 
-    n = 2
-    m = 1
-    p = 1
+    n, m, p = 2, 1, 1
+
     if inverted:
         sign = 1
     else:
@@ -94,7 +93,7 @@ def gen_pendulum_system(inverted, mass=10, damp=2, dt=0.1, Y=None, R=None, W=Non
     if W is None:
         W = 0.001*np.diag([0.0, 1.0])
     if V is None:
-        V = 0.001*np.diag([0.1])
+        V = 0.0001*np.diag([1.0])
     if U is None:
         U = np.zeros([n, p])
     return n, m, p, A, B, C, D, Y, Q, R, W, V, U
@@ -119,7 +118,8 @@ def gen_example_system(idx, noise_scale=1.0):
         Y = np.eye(p)
         Q = np.dot(C.T, np.dot(Y, C))
         R = 0.01*np.eye(m)
-        W = 0.1*np.eye(n)
+        # W = 0.1*np.eye(n)
+        W = np.diag([0.001, 0.1])
         V = 0.1*np.eye(p)
         U = np.zeros([n, p])
 
@@ -142,6 +142,63 @@ def gen_example_system(idx, noise_scale=1.0):
         R = 0.01*np.eye(m)
         W = 0.1*np.eye(n)
         V = 0.1*np.eye(p)
+        U = np.zeros([n, p])
+
+
+    elif idx == 3:
+
+
+        # n, m, p = 2, 1, 2
+        # A = np.array([[0.0, 1.0],
+        #               [0.0, 0.0]])
+        # B = np.array([[0.0],
+        #               [1.0]])
+        # # C = np.eye(2)
+        # C = np.array([[1.0, -1.0],
+        #               [1.0, 1.0]])
+        # D = np.zeros([p, m])
+        # Y = np.eye(p)
+        # Q = np.array([[1.0, 1.0],
+        #               [1.0, 1.0]])
+        # R = 0.01*np.eye(m)
+        # W = 0.1*np.eye(n)
+        # # W = np.diag([0.001, 0.1])
+        # V = 0.1*np.diag([1.0, 10.0])
+        # U = np.zeros([n, p])
+
+        # n, m, p = 4, 2, 2
+        #
+        #
+        # A = np.array([[0.0, 1.0],
+        #               [0.0, 0.0]])
+        # B = np.array([[0.0],
+        #               [1.0]])
+        # # C = np.eye(2)
+        # C = np.array([[1.0, -1.0],
+        #               [1.0, 1.0]])
+        # D = np.zeros([p, m])
+        # Y = np.eye(p)
+        # Q = np.array([[1.0, 1.0],
+        #               [1.0, 1.0]])
+        # R = 0.01*np.eye(m)
+        # W = 0.1*np.eye(n)
+        # # W = np.diag([0.001, 0.1])
+        # V = 0.1*np.diag([1.0, 10.0])
+        # U = np.zeros([n, p])
+
+        n, m, p = 2, 1, 1
+        A = np.array([[1.0, 0.2],
+                      [-0.2, 0.7]])
+        B = np.array([[0],
+                      [0.1]])
+        C = np.array([[1.0, 0.0]])
+        D = np.array([[0.0]])
+        Y = np.eye(p)
+        Q = np.array([[1.0, 0.0],
+                      [0.0, 0.0]])
+        R = 0.1*np.eye(m)
+        W = np.diag([0.0001, 0.01])
+        V = 0.0001*np.eye(p)
         U = np.zeros([n, p])
 
     else:

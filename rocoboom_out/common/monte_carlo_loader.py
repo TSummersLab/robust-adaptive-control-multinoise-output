@@ -111,7 +111,7 @@ def get_dirs_by_time(parent_folder, time_min, time_max):
 if __name__ == "__main__":
     experiment_folder = EXPERIMENT_FOLDER
 
-    # experiment = get_last_dir(experiment_folder)
+    experiment = get_last_dir(experiment_folder)
     # experiment = '1637467652p5037403_Ns_10000_T_321_system_1_seed_1'
     # experiment = '1637595430p9019032_Ns_10000_T_321_system_1_seed_2'
     # experiment = '1637679639p3378303_Ns_10000_T_321_system_1_seed_10'
@@ -124,17 +124,17 @@ if __name__ == "__main__":
     # n, m, p, A, B, C, D, Y, Q, R, W, V, U) = load_problem_data(experiment)
 
     # Load results
-    # output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = load_results(experiment)
+    output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = load_results(experiment)
 
-    # Load results from multiple experiments
-    # experiments = ['1637770954p6599007_Ns_10_T_321_system_1_seed_1',
-    #                '1637770969p3941662_Ns_10_T_321_system_1_seed_2',
-    #                '1637770985p5349584_Ns_10_T_321_system_1_seed_3']
+    # # Load results from multiple experiments
+    # # experiments = ['1637770954p6599007_Ns_10_T_321_system_1_seed_1',
+    # #                '1637770969p3941662_Ns_10_T_321_system_1_seed_2',
+    # #                '1637770985p5349584_Ns_10_T_321_system_1_seed_3']
     # experiments = get_dirs_by_time(experiment_folder, 1637770954, 1637770985)  # 10
-    experiments = get_dirs_by_time(experiment_folder, 1637467652, 1637679639)  # 10000
-    experiments.reverse()  # This is only because seed=1 has extra fields that should not be catted, redo seed=1 with current code to eliminate this line
+    # # experiments = get_dirs_by_time(experiment_folder, 1637467652, 1637679639)  # 10000
+    # experiments.reverse()  # This is only because seed=1 has extra fields that should not be catted, redo seed=1 with current code to eliminate this line
     #
-    output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = aggregate_experiment_results(experiments)
+    # output_dict, cost_are_true, t_hist, t_start_estimate, t_evals = aggregate_experiment_results(experiments)
 
     # # Print the log data, if it exists
     # show_diagnostics = False

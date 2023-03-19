@@ -163,7 +163,7 @@ def ensemble2multnoise(model, u_boot_hist, y_boot_hist, return_models=False, ver
 
 
     # TODO account for correlation between A, B, C
-    # can we do it easily with a decorrelation scheme /coordinate change?
+    # can we do it easily with a decorrelation scheme / coordinate change?
     # or do we need to re-derive the full gdare w/ terms?
 
     Abar = Ahat_boot_reshaped - Ahat_boot_mean_reshaped
